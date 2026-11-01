@@ -56,7 +56,7 @@ export function EventsPage({ inSetup = false }: { inSetup?: boolean }) {
       </div>
       <Title sub={event.date && formatWhen(event.date)}>{event.name}</Title>
       {/* Remount when prep finishes (or someone is added) so the people list re-fetches. */}
-      <People key={`${event.id}:${event.status}:${added}`} event={event} />
+      <People key={`${event.id}:${event.status}:${added}`} event={event} onRetry={() => void events.reload()} />
       {!inSetup && event.status !== "pending" && (
         <EventFooter
           event={event}
@@ -92,7 +92,7 @@ function EventFooter({
   };
   return (
     <div className="space-y-4 pt-4">
-      <QuickAdd eventId={event.id} onAdded={onPersonAdded} />
+      {event.status === "ready" && <QuickAdd eventId={event.id} onAdded={onPersonAdded} />}
       {error && <Notice>{error}</Notice>}
       <div className="flex justify-center gap-4">
         <Button variant="ghost" onClick={() => void rename()}>
@@ -197,10 +197,17 @@ function AddEvent({ onAdded, onCancel }: { onAdded: (e: Event) => void; onCancel
   );
 }
 
-function People({ event }: { event: Event }) {
+function People({ event, onRetry }: { event: Event; onRetry: () => void }) {
   const people = useApi(api.listPeople, { id: event.id });
   if (event.status === "pending") return <Pending>Scouting the guest list (reading bios so you don't have to)…</Pending>;
-  if (event.status === "error") return <Notice>{event.error ?? "Couldn't prep this one."} Tap New event to try again.</Notice>;
+  if (event.status === "error") {
+    return (
+      <div className="space-y-5">
+        <Notice>{event.error ?? "Couldn't prep this one."}</Notice>
+        <AddNames eventId={event.id} onSent={onRetry} />
+      </div>
+    );
+  }
   if (people.loading) return <Pending>Ranking the room…</Pending>;
   if (people.data?.length === 0) {
     return <p className="text-[15px] text-muted text-pretty">Nobody found. Screenshots of the guest list usually work better, tap New event.</p>;
@@ -215,6 +222,30 @@ function People({ event }: { event: Event }) {
           </li>
         ))}
       </ol>
+    </div>
+  );
+}
+
+/** Rescue a failed event in place: paste the names, keep the event. */
+function AddNames({ eventId, onSent }: { eventId: string; onSent: () => void }) {
+  const [guestList, setGuestList] = useState("");
+  const [error, setError] = useState<string>();
+  const send = () =>
+    call(api.addGuests, { params: { id: eventId }, body: { guestList } }).then(onSent, (e) => setError(friendlyError(e)));
+  return (
+    <div className="space-y-3">
+      <Field label="Paste the names, one per line">
+        <textarea
+          className={`${fieldClass} h-28 resize-none`}
+          placeholder={"Sam Chen - Founder, VoiceKit\nPriya Patel - ML eng"}
+          value={guestList}
+          onChange={(e) => setGuestList(e.target.value)}
+        />
+      </Field>
+      {error && <Notice>{error}</Notice>}
+      <Button className="w-full" onClick={() => void send()} disabled={!guestList.trim()}>
+        Scout these instead
+      </Button>
     </div>
   );
 }

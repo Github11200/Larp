@@ -1,5 +1,5 @@
 // Chunk 4 · Event + people prep. Owns: this folder, web/src/features/prep.
-import { api } from "@larp/shared";
+import { api, type Event } from "@larp/shared";
 import { Router } from "express";
 import { handle } from "../../http/route";
 import { db, newId } from "../../lib/db";
@@ -19,14 +19,12 @@ handle(prepRoutes, api.listEvents, async ({ userId }) => {
 handle(prepRoutes, api.createEvent, async ({ userId, body }) => {
   const taken = new Set((await db.events.list(userId)).map((e) => e.name));
   const event = await db.events.put(userId, { id: newId(), name: unique(defaultName(body.url), taken), url: body.url, status: "pending", createdAt: Date.now() });
-  // A job that never starts must not leave the event pending forever.
-  return enqueue("prep.event", { userId, eventId: event.id, guestList: body.guestList, screenshots: body.screenshots }).then(
-    () => event,
-    (err) => {
-      console.error("[prep] enqueue failed", err);
-      return db.events.put(userId, { ...event, status: "error", error: "Couldn't start scouting (the job queue is napping). Try again in a sec." });
-    },
-  );
+  return startPrep(userId, event, body);
+});
+
+handle(prepRoutes, api.addGuests, async ({ userId, params, body }) => {
+  const event = await db.events.update(userId, params.id, (e) => ({ ...e, status: "pending", error: undefined }));
+  return startPrep(userId, event, body);
 });
 
 handle(prepRoutes, api.getEvent, ({ userId, params }) => db.events.require(userId, params.id));
@@ -60,6 +58,17 @@ handle(prepRoutes, api.requestDossier, async ({ userId, params, body }) => {
     },
   );
 });
+
+/** A job that never starts must not leave the event pending forever. */
+function startPrep(userId: string, event: Event, input: { guestList?: string; screenshots?: string[] }) {
+  return enqueue("prep.event", { userId, eventId: event.id, guestList: input.guestList, screenshots: input.screenshots }).then(
+    () => event,
+    (err) => {
+      console.error("[prep] enqueue failed", err);
+      return db.events.put(userId, { ...event, status: "error", error: "Couldn't start scouting (the job queue is napping). Try again in a sec." });
+    },
+  );
+}
 
 /** Pasted lists have no page title; name it after the day so it's tellable apart from the others. */
 function defaultName(url?: string) {

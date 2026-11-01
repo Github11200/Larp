@@ -72,6 +72,10 @@ try {
   await page.getByText("Prep me").click();
   await page.getByText(/Couldn't read that link/).waitFor(T);
   await shot("6-bad-link");
+  // ...and is rescued in place by pasting names.
+  await page.getByPlaceholder(/Sam Chen - Founder/).fill("Linus Torvalds - Kernel");
+  await page.getByText("Scout these instead").click();
+  await page.getByText("Linus Torvalds").waitFor(T);
 
   // Dead links get friendly copy.
   await page.goto(`${base}/people/nope`);

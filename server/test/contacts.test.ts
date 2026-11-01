@@ -151,9 +151,10 @@ test("unreadable event link is an error with a fix, and is not cached", async ()
     const file = new URL(`../.cache/prep/event-${createHash("sha1").update(JSON.stringify(url)).digest("hex").slice(0, 16)}.json`, import.meta.url);
     expect(existsSync(file)).toBe(false);
 
-    // Same bad link plus pasted names still preps from the names.
-    await prepEvent({ userId: u, eventId: "bad", guestList: "Ada Lovelace" });
-    expect((await db.events.require(u, "bad")).status).toBe("ready");
+    // Same bad link plus pasted names still preps from the names, in place.
+    await call(u, api.addGuests, { params: { id: "bad" }, body: { guestList: "Ada Lovelace" } });
+    await waitFor(() => call(u, api.getEvent, { params: { id: "bad" } }), (x) => x.status === "ready");
+    expect((await call(u, api.listPeople, { params: { id: "bad" } })).map((p) => p.name)).toEqual(["Ada Lovelace"]);
   } finally {
     spy.mockRestore();
   }
