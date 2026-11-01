@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { buildProfile } from "./modules/profile/build";
 import { prepDossier, prepEvent } from "./modules/prep/jobs";
+import { summarize } from "./modules/followups/summarize";
 
 export const jobs = {
   "profile.build": {
@@ -17,6 +18,7 @@ export const jobs = {
     payload: z.object({ userId: z.string(), personId: z.string() }),
     run: prepDossier,
   },
+  "followups.summarize": { payload: z.object({ userId: z.string(), conversationId: z.string() }), run: summarize },
 } satisfies Record<string, { payload: z.ZodType; run: (p: never) => Promise<void> }>;
 
 export type JobName = keyof typeof jobs;
