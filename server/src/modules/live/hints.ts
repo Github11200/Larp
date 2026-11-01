@@ -144,7 +144,7 @@ async function unfinishedHint(ctx: LiveContext, st: HintState): Promise<void> {
  * Asks for a hint and whispers it, unless a hint from a newer request already went out. `urgent` (a question) skips the cooldown.
  * Stays quiet when the coach judges the user said the line (else it answers the user's own questions),
  * and when the chat moved on while it thought. `early`: asked mid-line, so that line finishing isn't "moving on".
- * `force`: the user asked (volume-button nudge), so none of that holds it back.
+ * `force`: the user asked (nudge), so none of that holds it back.
  */
 async function askHint(
   ctx: LiveContext,

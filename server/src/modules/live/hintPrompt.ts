@@ -117,14 +117,15 @@ export function stallPrompt(transcript: Utterance[], hints: Hint[]): string {
   ].join("\n");
 }
 
-/** The user pressed the nudge button: they're signaling "they just said something, help me respond." */
+/** The user asked for help: "they just said something, help me respond." Always answers, but never invents facts. */
 export function nudgePrompt(transcript: Utterance[], hints: Hint[]): string {
   return [
     context(transcript, hints),
     "",
-    "The user just pressed a button signaling they need help responding RIGHT NOW.",
-    "The most recent lines are from the other person (THEM). Line 1: them.",
-    "Line 2: what the user should say back. This is urgent — always give a hint, never -.",
+    "The user just asked for help replying to the last line from THEM. Line 1: them.",
+    "Line 2: what the user says back, at most 12 words. Always give one, never -.",
+    "Use only facts from the user's profile above. Never invent projects, numbers, names or experience.",
+    "If the profile doesn't cover it, give an honest short line: a plain take, or admit it and ask them back.",
   ].join("\n");
 }
 
