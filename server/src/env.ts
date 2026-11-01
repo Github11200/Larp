@@ -10,6 +10,10 @@ export const env = {
   basetenKey: process.env.BASETEN_API_KEY || undefined,
   llmFastModel: process.env.LLM_FAST_MODEL || "moonshotai/Kimi-K2-Instruct-0905",
   llmSmartModel: process.env.LLM_SMART_MODEL || "deepseek-ai/DeepSeek-V3.1",
+  /** Must accept images (guest-list screenshots). */
+  llmVisionModel: process.env.LLM_VISION_MODEL || "meta-llama/Llama-4-Maverick-17B-128E-Instruct",
+  /** Exa web search for person research (chunk 4). Unset = dossiers use only what the guest list had. */
+  exaKey: process.env.EXA_API_KEY || undefined,
   /** Comma-separated origins allowed to call the API (the Render static site URL). Unset = any. */
   webOrigins: process.env.WEB_ORIGIN?.split(",").map((s) => s.trim()),
 };

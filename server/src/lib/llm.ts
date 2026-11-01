@@ -10,7 +10,9 @@ export type ModelTier =
   /** Live path (hints): latency beats depth. */
   | "fast"
   /** Prep path (profile, dossiers, follow-ups): quality beats latency. */
-  | "smart";
+  | "smart"
+  /** Reads images (e.g. guest-list screenshots). */
+  | "vision";
 
 export interface Ask {
   model?: ModelTier;
@@ -18,6 +20,8 @@ export interface Ask {
   system?: string;
   prompt: string;
   maxTokens?: number;
+  /** Image data URLs (data:image/...;base64,...) sent with the prompt. Needs the "vision" tier. */
+  images?: string[];
 }
 
 /** False when no provider key is set; callers should fall back to their stub. */
@@ -50,12 +54,15 @@ export async function* streamText(ask: Ask): AsyncGenerator<string> {
 async function complete(ask: Ask, defaultTier: ModelTier, stream: boolean, extra: object = {}): Promise<Response> {
   if (!env.basetenKey) throw new Error("LLM provider not configured (set BASETEN_API_KEY)");
   const tier = ask.model ?? defaultTier;
-  const messages = [...(ask.system ? [{ role: "system", content: ask.system }] : []), { role: "user", content: ask.prompt }];
+  const user = ask.images?.length
+    ? [{ type: "text", text: ask.prompt }, ...ask.images.map((url) => ({ type: "image_url", image_url: { url } }))]
+    : ask.prompt;
+  const messages = [...(ask.system ? [{ role: "system", content: ask.system }] : []), { role: "user", content: user }];
   const res = await fetch(`${BASE_URL}/chat/completions`, {
     method: "POST",
     headers: { authorization: `Bearer ${env.basetenKey}`, "content-type": "application/json" },
     body: JSON.stringify({
-      model: tier === "fast" ? env.llmFastModel : env.llmSmartModel,
+      model: { fast: env.llmFastModel, smart: env.llmSmartModel, vision: env.llmVisionModel }[tier],
       messages,
       max_tokens: ask.maxTokens ?? (tier === "fast" ? 100 : 2000),
       stream,
