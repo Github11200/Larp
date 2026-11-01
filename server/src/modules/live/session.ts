@@ -240,6 +240,10 @@ export class LiveSession implements LiveContext {
       {
         onPartial: (text, speaker) => this.partial(text, speaker),
         onCommit: (text, speaker) => this.track(this.commit(text, speaker)),
+        onDead: () => {
+          this.stt = null;
+          if (!this.ended) this.openStt();
+        },
       },
       this.knownNames,
     );

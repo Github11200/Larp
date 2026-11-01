@@ -34,6 +34,7 @@ export class LiveAudio {
   private stopMic?: () => void;
   private sources: AudioBufferSourceNode[] = [];
   private endsAt = 0;
+  private visHandler?: () => void;
 
   /**
    * Call synchronously from the Start tap. Unlocks playback, then asks for the mic.
@@ -61,6 +62,13 @@ export class LiveAudio {
         src.disconnect();
         node.disconnect();
       };
+      // iOS/Android suspend the AudioContext when the page backgrounds; resume it when it returns.
+      this.visHandler = () => {
+        if (document.visibilityState === "visible" && this.ctx?.state === "suspended") {
+          void this.ctx.resume();
+        }
+      };
+      document.addEventListener("visibilitychange", this.visHandler);
     } catch (e) {
       this.micStarted = false; // let them try again after fixing permissions
       throw e;
@@ -96,6 +104,10 @@ export class LiveAudio {
     this.stopMic?.();
     this.stopMic = undefined;
     this.micStarted = false;
+    if (this.visHandler) {
+      document.removeEventListener("visibilitychange", this.visHandler);
+      this.visHandler = undefined;
+    }
     void this.ctx?.close();
     this.ctx = null;
   }
