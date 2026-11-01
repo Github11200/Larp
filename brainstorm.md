@@ -14,7 +14,11 @@ The journey has three stages:
 2. **During:** it listens, whispers hints, and has your links ready the moment someone asks.
 3. **After:** it remembers every conversation and tells you who to reach out to and what you promised.
 
+
+
 ## Features
+
+
 
 ### 1. Knowledge base: it knows you
 
@@ -38,7 +42,3 @@ Because it's listening, it knows when someone asks "do you have a demo?" or "wha
 
 After the event it turns every conversation into a list of who you met, what you talked about, and what you promised. A week later it nudges you ("you told Sam you'd send the deck") and drafts the follow-up message so all you do is hit send.
 
-## Cut
-
-- Calendar scanning
-- Taking actions on your behalf (e.g. shipping a feature someone asked for)
