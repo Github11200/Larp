@@ -4,6 +4,7 @@ import { Dossier, type Person } from "@larp/shared";
 import { db, newId } from "../../lib/db";
 import { askJson, llmAvailable } from "../../lib/llm";
 import { cached } from "./cache";
+import { RESPECT } from "./prompts";
 import { rankGuests } from "./rank";
 import { researchPerson } from "./research";
 import { dedupe, parseGuestList, readScreenshots, scrapeEvent, type EventPage } from "./sources";
@@ -57,16 +58,13 @@ async function writeDossier(userId: string, person: Person): Promise<Dossier> {
     ? `${profile.name}: ${profile.headline}. ${profile.summary}\nSkills: ${profile.skills.join(", ")}\nProjects: ${profile.projects.map((p) => `${p.name} (${p.description})`).join("; ")}`
     : "unknown";
   const them = `${person.name}${person.headline ? `: ${person.headline}` : ""}\nLinks: ${person.links.join(", ") || "none"}`;
-  return cached("dossier", { me, them, research, event: event?.name }, () =>
-    askJson(Dossier, {
-      prompt:
-        `I'm about to meet someone at "${event?.name ?? "an event"}". Brief me like a hype-man who did their homework.\n\n` +
-        `Me: ${me}\n\nThem: ${them}\n\nWeb search results (may include other people with the same name; ignore those):\n${research || "none"}\n\n` +
-        "summary: 1-2 sentences on who they are. workingOn, interests: short phrases, only things the sources support. " +
-        "commonGround: overlaps between me and them. openers: 3 casual lines I can actually say out loud, max 15 words each, " +
-        "referencing something specific about them. If you know little, say so in summary rather than inventing facts.",
-    }),
-  );
+  const prompt =
+    `I'm about to meet someone at "${event?.name ?? "an event"}". Brief me like a hype-man who did their homework.\n\n` +
+    `Me: ${me}\n\nThem: ${them}\n\nWeb search results (may include other people with the same name; ignore those):\n${research || "none"}\n\n` +
+    "summary: 1-2 sentences on who they are. workingOn, interests: short phrases, only things the sources support. " +
+    "commonGround: overlaps between me and them. openers: 3 casual lines I can actually say out loud, max 15 words each, " +
+    `referencing something specific about them. If you know little, say so in summary rather than inventing facts. ${RESPECT}`;
+  return cached("dossier", prompt, () => askJson(Dossier, { prompt }));
 }
 
 const stubDossier = (p: Person): Dossier => ({
