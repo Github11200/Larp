@@ -1,6 +1,6 @@
 // Live mode beyond "I prepped this one person": strangers, names caught from speech, groups,
 // reconnects that keep the same conversation, and saving that never waits on a stuck call.
-import { demoPeople, type ServerMsg } from "@larp/shared";
+import { demoPeople, demoProfile, type ServerMsg } from "@larp/shared";
 import { expect, test, vi } from "vitest";
 import { db } from "../src/lib/db";
 import { seedDemo } from "../src/lib/seed";
@@ -186,4 +186,18 @@ test("a newer whisper silences the older one: no old audio after the new hint", 
   const oldAudioAfter = r.sent.slice(newHintAt).filter((m) => m.type === "audio" && m.text === "old");
   expect(oldAudioAfter).toEqual([]);
   expect(r.sent.filter((m) => m.type === "audio" && m.text === "new")).toHaveLength(3);
+});
+
+test("misheard names in the transcript snap to me and the event's attendees", async () => {
+  const userId = await newUser();
+  await db.profiles.put(userId, { ...demoProfile, name: "Nonit Gupta" });
+  await db.people.put(userId, { ...demoPeople[0], id: "p-jinay", name: "Jinay Shah" });
+  const r = recorder();
+  const s = new LiveSession(userId, r.transport, listeners);
+  await s.handle({ type: "start" });
+  await s.handle({ type: "say", speaker: "unknown", text: "Hi, I'm No nit, and this is my friend Janae." });
+  await s.stop();
+  expect(r.of("transcript")[0].text).toBe("Hi, I'm Nonit, and this is my friend Jinay.");
+  expect(s.conversation.transcript[0].text).toBe("Hi, I'm Nonit, and this is my friend Jinay.");
+  expect(s.conversation.participants.map((p) => p.name)).toEqual(["Jinay Shah"]); // not a stranger called "No"
 });

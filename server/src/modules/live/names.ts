@@ -3,9 +3,13 @@
 // Pure and sync: runs on every finished line.
 import type { Person } from "@larp/shared";
 
-// A cue phrase, then the name is captured by lookahead (not consumed) so "hi, I'm Sam" still sees "I'm Sam".
-const CUE =
-  /\b(?:i'?m|i am|my name is|my name's|name's|call me|this is|meet|say hi to|hey|hi|hello|yo|thanks|thank you|nice to meet you|good to meet you|great to meet you)\s*,?\s+(?:my\s+(?:friend|cofounder|co-founder|colleague|coworker|teammate|boss|partner|roommate|manager)\s*,?\s+)?(?=([a-z][a-z'-]*))/gi;
+// A cue phrase that introduces or greets someone, optionally "my friend", then their name.
+const CUE_LEAD =
+  "\\b(?:i'?m|i am|my name is|my name's|name's|call me|this is|meet|say hi to|hey|hi|hello|yo|thanks|thank you|nice to meet you|good to meet you|great to meet you)\\s*,?\\s+(?:my\\s+(?:friend|cofounder|co-founder|colleague|coworker|teammate|boss|partner|roommate|manager)\\s*,?\\s+)?";
+// The name is captured by lookahead (not consumed) so "hi, I'm Sam" still sees "I'm Sam".
+const CUE = new RegExp(`${CUE_LEAD}(?=([a-z][a-z'-]*))`, "gi");
+/** Text ending in a cue, i.e. the next word is probably a name. */
+const ENDS_IN_CUE = new RegExp(`${CUE_LEAD}$`, "i");
 const LAST_NAME = /^\s+([A-Z][a-z]+)\b/;
 
 /** Words that follow a cue but aren't names ("I'm good", "hey everyone", "this is great"). */
@@ -97,3 +101,101 @@ function dedupe(names: CaughtName[]): CaughtName[] {
     return !seen.has(key) && seen.add(key);
   });
 }
+
+interface KnownName {
+  first: string;
+  key: string;
+  /** Only when the first name is unique, so "Janae Shaw" -> "Jinay Shah" can't pick the wrong Jinay. */
+  last?: string;
+}
+
+/**
+ * Snaps misheard names to names we know: "I'm No nit" -> "I'm Nonit", "Janae" -> "Jinay".
+ * Sync and cheap: runs on every partial. A word only changes when it sounds like a known first name,
+ * is spelled within a letter or two of it, and is said like a name: right after a cue ("I'm", "hey",
+ * "this is my friend") or Capitalized mid-sentence. A split name ("No nit") needs the cue or both
+ * words Capitalized, so "I have no net worth" stays put.
+ */
+export function nameFixer(known: string[]): (text: string) => string {
+  const byFirst = new Map<string, KnownName>();
+  for (const full of known) {
+    const [first, ...rest] = full.trim().split(/\s+/);
+    if (!first || norm(first).length < 3) continue;
+    const seen = byFirst.get(norm(first));
+    if (seen) seen.last = seen.last === rest.join(" ") ? seen.last : undefined;
+    else byFirst.set(norm(first), { first, key: soundKey(norm(first)), last: rest.join(" ") || undefined });
+  }
+  const names = [...byFirst.values()];
+  return names.length ? (text) => fixNames(text, names) : (text) => text;
+}
+
+function fixNames(text: string, names: KnownName[]): string {
+  const words = [...text.matchAll(/\p{L}+/gu)].map((m) => ({ text: m[0], at: m.index, end: m.index + m[0].length }));
+  const edits: { at: number; end: number; to: string }[] = [];
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    const next = words[i + 1];
+    const cued = ENDS_IN_CUE.test(text.slice(0, w.at));
+    const pair = next && /^\s+$/.test(text.slice(w.end, next.at)) ? next : undefined;
+    const pairOk = pair && (cued || (isCap(w.text) && isCap(pair.text)));
+    const twoWord = pairOk ? closest(w.text + pair.text, names) : undefined;
+    const name = twoWord ?? (cued || (isCap(w.text) && midSentence(text, w.at)) ? closest(w.text, names) : undefined);
+    if (!name || NOT_NAMES.has(w.text.toLowerCase())) continue;
+    const used = twoWord ? 2 : 1;
+    let end = words[i + used - 1].end;
+    let to = name.first;
+    const lastWord = words[i + used];
+    if (name.last && lastWord && isCap(lastWord.text) && /^\s+$/.test(text.slice(end, lastWord.at))) {
+      const last = closest(lastWord.text, [{ first: name.last, key: soundKey(norm(name.last)) }]);
+      if (last) [end, to] = [lastWord.end, `${name.first} ${name.last}`];
+    }
+    edits.push({ at: w.at, end, to });
+    i = words.findIndex((x) => x.end === end);
+  }
+  let out = text;
+  for (const e of edits.reverse()) out = out.slice(0, e.at) + e.to + out.slice(e.end);
+  return out;
+}
+
+/** The known name a word sounds and spells most like; none when two tie (ambiguous). */
+function closest(said: string, names: KnownName[]): KnownName | undefined {
+  const s = norm(said);
+  let best: KnownName | undefined;
+  let bestD = Infinity;
+  let tie = false;
+  for (const n of names) {
+    const d = soundsLike(s, n);
+    if (d === undefined) continue;
+    if (d < bestD) [best, bestD, tie] = [n, d, false];
+    else if (d === bestD) tie = true;
+  }
+  return tie ? undefined : best;
+}
+
+/** Edit distance when `said` could be a mishearing of the name: same consonant sounds, at most 1-2 letters off. */
+function soundsLike(said: string, name: KnownName): number | undefined {
+  const target = norm(name.first);
+  if (said === target) return 0;
+  if (said.length < 3 || soundKey(said) !== name.key) return undefined;
+  const d = editDistance(said, target);
+  return d <= (target.length >= 5 ? 2 : 1) ? d : undefined;
+}
+
+// Soundex-style consonant classes: letters that STT confuses share a digit; vowels, h, w, y drop out.
+const SOUND: Record<string, string> = Object.fromEntries(
+  ["bfpv", "cgjkqsxz", "dt", "l", "mn", "r"].flatMap((group, i) => [...group].map((ch) => [ch, String(i + 1)])),
+);
+function soundKey(s: string): string {
+  let key = "";
+  let prev = "";
+  for (const ch of s) {
+    const code = SOUND[ch] ?? "";
+    if (code && code !== prev) key += code;
+    prev = code;
+  }
+  return key;
+}
+
+const isCap = (w: string) => /^\p{Lu}/u.test(w);
+/** Sentence starts are Capitalized anyway, so there a capital says nothing about being a name. */
+const midSentence = (text: string, at: number) => !/(^|[.!?]\s*)\W*$/.test(text.slice(0, at));

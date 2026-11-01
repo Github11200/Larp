@@ -14,7 +14,7 @@ import type {
   Utterance,
 } from "@larp/shared";
 import { db, newId } from "../../lib/db";
-import { catchNames, matchAttendee } from "./names";
+import { catchNames, matchAttendee, nameFixer } from "./names";
 import { openersFor } from "./openers";
 import { openStt, sttAvailable, type SttStream } from "./stt";
 import { synthesize } from "./tts";
@@ -94,6 +94,9 @@ export class LiveSession implements LiveContext {
   private graceTimer?: NodeJS.Timeout;
   /** Saves run one after another, so a late mid-chat snapshot can never overwrite the final save. */
   private saving = Promise.resolve();
+  /** Names likely said out loud (me, who's here, the event's attendees), most important first. */
+  private knownNames: string[] = [];
+  private fixNames = nameFixer([]);
 
   constructor(
     readonly userId: string,
@@ -206,6 +209,7 @@ export class LiveSession implements LiveContext {
     open.set(key(this.userId, this.conversation.id), this);
     if (!resumed && personId) await this.setPerson(personId);
     if (!this.event) await this.pickEvent(eventId);
+    this.learnNames(await this.attendees());
     this.openStt();
     this.sendReady(resumed);
   }
@@ -232,10 +236,20 @@ export class LiveSession implements LiveContext {
   }
 
   private openStt(): void {
-    this.stt ??= openStt({
-      onPartial: (text, speaker) => this.partial(text, speaker),
-      onCommit: (text, speaker) => this.track(this.commit(text, speaker)),
-    });
+    this.stt ??= openStt(
+      {
+        onPartial: (text, speaker) => this.partial(text, speaker),
+        onCommit: (text, speaker) => this.track(this.commit(text, speaker)),
+      },
+      this.knownNames,
+    );
+  }
+
+  /** STT is biased toward these names, and misheard ones snap back to their spelling. */
+  private learnNames(attendees: Person[]): void {
+    const names = [this.profile?.name, ...this.conversation.participants.map((p) => p.name), ...attendees.map((p) => p.name)];
+    this.knownNames = [...new Set(names.filter((n): n is string => Boolean(n?.trim())))];
+    this.fixNames = nameFixer(this.knownNames);
   }
 
   /** Ready, then everything the screen needs to pick up where it was. */
@@ -326,7 +340,9 @@ export class LiveSession implements LiveContext {
   /** Names said out loud join the conversation; a matching attendee brings their dossier. */
   private async catchNames(text: string): Promise<void> {
     const ignore = [this.profile?.name ?? "", ...(this.profile?.projects.map((p) => p.name) ?? [])];
-    for (const c of catchNames(text, await this.attendees(), ignore)) await this.welcome(c.person ?? null, c.name);
+    const attendees = await this.attendees();
+    for (const c of catchNames(text, attendees, ignore)) await this.welcome(c.person ?? null, c.name);
+    this.learnNames(attendees);
   }
 
   /** Dossiers still cooking when the chat started may be ready now. */
@@ -342,7 +358,8 @@ export class LiveSession implements LiveContext {
     if (changed) this.send({ type: "openers", lines: openersFor(this) });
   }
 
-  private partial(text: string, speaker: Speaker): void {
+  private partial(raw: string, speaker: Speaker): void {
+    const text = this.fixNames(raw);
     this.send({ type: "transcript", speaker, text, final: false });
     for (const l of this.listeners) {
       try {
@@ -353,7 +370,8 @@ export class LiveSession implements LiveContext {
     }
   }
 
-  private async commit(text: string, speaker: Speaker): Promise<void> {
+  private async commit(raw: string, speaker: Speaker): Promise<void> {
+    const text = this.fixNames(raw);
     const hints = this.conversation.hints;
     if (speaker === "unknown" && isEchoOfHint(text, hints)) return; // the mic heard the coach
     const sayingHint = speaker === "unknown" && repeatsHint(text, hints);

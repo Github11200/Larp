@@ -29,10 +29,25 @@ const URL_PARAMS = new URLSearchParams({
 /** False without an ElevenLabs key: the phone can't be heard, so lines have to be typed. */
 export const sttAvailable = Boolean(env.elevenLabsKey);
 
-/** Returns null when STT is unavailable; the session still works via `say` messages. */
-export function openStt(events: SttEvents): SttStream | null {
+/** Scribe realtime keyterm limits. */
+const MAX_KEYTERMS = 50;
+const MAX_KEYTERM_CHARS = 20;
+
+/** Bias Scribe toward these names (most important first): each first name, plus the full name when it fits. */
+function keytermParams(names: string[]): URLSearchParams {
+  const terms = names.flatMap((n) => [n.trim().split(/\s+/)[0], n.trim()]).filter((t) => t && t.length <= MAX_KEYTERM_CHARS);
+  const params = new URLSearchParams(URL_PARAMS);
+  for (const t of [...new Set(terms)].slice(0, MAX_KEYTERMS)) params.append("keyterms", t);
+  return params;
+}
+
+/**
+ * Returns null when STT is unavailable; the session still works via `say` messages.
+ * `names` are people likely to be named out loud, so Scribe spells them right.
+ */
+export function openStt(events: SttEvents, names: string[] = []): SttStream | null {
   if (!env.elevenLabsKey) return null;
-  const ws = new WebSocket(`wss://api.elevenlabs.io/v1/speech-to-text/realtime?${URL_PARAMS}`, {
+  const ws = new WebSocket(`wss://api.elevenlabs.io/v1/speech-to-text/realtime?${keytermParams(names)}`, {
     headers: { "xi-api-key": env.elevenLabsKey },
   });
   let ready = false;
