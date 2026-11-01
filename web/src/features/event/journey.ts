@@ -4,7 +4,7 @@ import type { Stage } from "../../routes";
 
 const day = (t: number) => new Date(t).setHours(0, 0, 0, 0);
 /** Date-only strings are a calendar day in UTC terms; read them as that local day. */
-const eventDay = (date: string) => (/^\d{4}-\d{2}-\d{2}$/.test(date) ? day(new Date(`${date}T12:00:00`).getTime()) : day(Date.parse(date)));
+export const eventDay = (date: string) => (/^\d{4}-\d{2}-\d{2}$/.test(date) ? day(new Date(`${date}T12:00:00`).getTime()) : day(Date.parse(date)));
 
 /** Future event: prep. Past event: recap. Today (or undated): live once you've talked to someone. */
 export function defaultStage(event: Event, chats: Conversation[]): Stage {
@@ -17,7 +17,10 @@ export function defaultStage(event: Event, chats: Conversation[]): Stage {
   return chats.length ? "live" : "prep";
 }
 
-/** "Tonight", "Tomorrow", "Nov 8", or nothing for undated events. */
+/** Local midnight of the event's day (undated: the day it was added), for sorting and upcoming vs past. */
+export const dayOf = (e: Event) => (e.date ? eventDay(e.date) : day(e.createdAt ?? 0));
+
+/** "Today", "Tomorrow", "Nov 8", or nothing for undated events. */
 export function whenLabel(event: Event): string | undefined {
   if (!event.date) return undefined;
   const diff = Math.round((eventDay(event.date) - day(Date.now())) / 86_400_000);

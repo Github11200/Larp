@@ -4,10 +4,8 @@ import { Plus } from "lucide-react";
 import { ButtonLink, Notice, Pending, Pill, Row, Rows, SectionLabel, Title } from "../../components/ui";
 import { useApi } from "../../lib/useApi";
 import { paths } from "../../routes";
-import { whenLabel } from "../event/journey";
+import { dayOf, whenLabel } from "../event/journey";
 import { friendlyError } from "./format";
-
-const when = (e: Event) => (e.date ? new Date(e.date).getTime() : (e.createdAt ?? 0));
 
 export function EventsListPage() {
   const events = useApi(api.listEvents, undefined, (es) => es.some((e) => e.status === "pending"));
@@ -16,8 +14,8 @@ export function EventsListPage() {
 
   const list = events.data ?? [];
   const today = new Date().setHours(0, 0, 0, 0);
-  const upcoming = list.filter((e) => when(e) >= today).sort((a, b) => when(a) - when(b));
-  const past = list.filter((e) => when(e) < today).sort((a, b) => when(b) - when(a));
+  const upcoming = list.filter((e) => dayOf(e) >= today).sort((a, b) => dayOf(a) - dayOf(b));
+  const past = list.filter((e) => dayOf(e) < today).sort((a, b) => dayOf(b) - dayOf(a));
 
   return (
     <div className="space-y-8">
@@ -46,7 +44,7 @@ function EventList({ title, events }: { title: string; events: Event[] }) {
             <Row
               to={paths.event(e.id)}
               title={<span className="text-title font-normal">{e.name}</span>}
-              meta={whenLabel(e) ?? (e.createdAt ? `Added ${new Date(e.createdAt).toLocaleDateString()}` : undefined)}
+              meta={whenLabel(e) === "Today" ? undefined : (whenLabel(e) ?? (e.createdAt ? `Added ${new Date(e.createdAt).toLocaleDateString()}` : undefined))}
               trail={statusPill(e)}
             />
           </li>
