@@ -7,7 +7,8 @@ envVarGroups:
     envVars:
       - key: ELEVENLABS_API_KEY
         sync: false
-      # Add LLM provider keys here once chosen.
+      - key: BASETEN_API_KEY
+        sync: false
 
 services:
   # Phone web app, served from Render's CDN.

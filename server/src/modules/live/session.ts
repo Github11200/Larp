@@ -79,7 +79,17 @@ export class LiveSession implements LiveContext {
     const hint = { id: newId(), text, at: Date.now() };
     this.conversation.hints.push(hint);
     this.send({ type: "hint", ...hint });
-    for await (const chunk of synthesize(text)) this.transport.binary(chunk);
+    const t0 = Date.now();
+    let firstAudio = 0;
+    try {
+      for await (const chunk of synthesize(text)) {
+        firstAudio ||= Date.now() - t0;
+        this.transport.binary(chunk);
+      }
+    } catch (e) {
+      console.error("[live:tts]", e); // the hint is already on screen; a silent whisper beats none
+    }
+    if (firstAudio) console.log(`[live] whisper "${text}" first audio +${firstAudio}ms`);
   }
 
   shareLink(link: Link): void {
