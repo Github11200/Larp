@@ -25,14 +25,14 @@ try {
   // New user: first event goes through guided setup.
   await page.goto(`${base}/setup/event?user=contacts-smoke-${Date.now()}`);
   await prep("Sam Chen - Founder, VoiceKit linkedin.com/in/sam-chen\nAda Lovelace - Analyst");
-  await page.getByText("Ada Lovelace").waitFor(T);
+  await page.getByText("Ada Lovelace", { exact: true }).waitFor(T);
 
   // Home shows the newest event. New event -> Cancel goes back.
   await page.goto(`${base}/`);
   await page.getByRole("heading", { name: /Mystery mixer/ }).waitFor(T);
   await page.getByRole("button", { name: "New event" }).click();
   await page.getByRole("button", { name: "Cancel" }).click();
-  await page.getByText("Ada Lovelace").waitFor();
+  await page.getByText("Ada Lovelace", { exact: true }).waitFor();
 
   // Second event with an overlapping person.
   await page.getByRole("button", { name: "New event" }).click();
@@ -46,7 +46,7 @@ try {
   await page.getByText("Coming up").waitFor();
   await shot("2-events-list");
   await page.locator("a[href^='/events/']").filter({ hasNotText: "#2" }).first().click();
-  await page.getByText("Ada Lovelace").waitFor();
+  await page.getByText("Ada Lovelace", { exact: true }).waitFor();
 
   // People tab: Sam is one contact seen at two events.
   await page.getByRole("link", { name: "People", exact: true }).click();

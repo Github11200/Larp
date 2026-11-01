@@ -17,7 +17,7 @@ page.on("console", (m) => m.type() === "error" && errors.push(`${m.text()} ${m.l
 const shot = (name) => page.screenshot({ path: `${shots}followups-${name}.png`, fullPage: true });
 
 async function talk(lines) {
-  await page.getByRole("button", { name: "Type instead of talking" }).click();
+  if (!(await page.getByPlaceholder("type what someone says…").isVisible())) await page.getByText("demo: type a line").click();
   const input = page.getByPlaceholder("type what someone says…");
   for (const [speaker, text] of lines) {
     await input.fill(text);
@@ -53,18 +53,27 @@ await page.getByText("PS: rematch at tennis?").waitFor();
 await page.getByRole("button", { name: "Copy" }).click();
 await page.getByRole("button", { name: "Copied" }).waitFor();
 
-// An unnamed chat: notes only, then "who was this?".
+// A stranger whose name the coach catches mid-chat gets their own follow-up.
 await page.getByRole("link", { name: "Go live" }).click();
 await talk([
   ["them", "Hey I'm Dana, I'm building robot baristas."],
   ["me", "No way. I’ll send you my GitHub."],
 ]);
+await page.getByRole("heading", { name: "Dana" }).waitFor();
+await written();
+
+// A nameless chat: notes only, then "who was this?".
+await page.getByRole("link", { name: "Go live" }).click();
+await talk([
+  ["them", "Honestly the coffee here is terrible."],
+  ["me", "Ha, I’ll send you the good place on Queen St."],
+]);
 await page.getByRole("heading", { name: "Who was this?" }).waitFor();
 await written();
 await shot("2-notes");
-await page.getByPlaceholder("Name, or names if a group").fill("Dana");
+await page.getByPlaceholder("Name, or names if a group").fill("Priya");
 await page.getByRole("button", { name: "Save", exact: true }).click();
-await page.getByRole("heading", { name: "Dana" }).waitFor();
+await page.getByRole("heading", { name: "Priya" }).waitFor();
 await written();
 
 // A week later: nudges + tab badge.

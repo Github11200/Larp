@@ -25,7 +25,7 @@ await page.getByText("Skip, use the demo crowd").click();
 await page.getByText("Read the dossiers first").click();
 await page.getByText("Sam Chen").click();
 await page.getByText("Talk to Sam").click();
-await page.getByRole("button", { name: "Type instead of talking" }).click();
+if (!(await page.getByPlaceholder("type what someone says…").isVisible())) await page.getByText("demo: type a line").click();
 const input = page.getByPlaceholder("type what someone says…");
 await input.fill("Do you have a demo?");
 await input.press("Enter");
