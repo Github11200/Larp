@@ -1,15 +1,16 @@
 // Chunk 1 · Prompts for the earpiece coach. Reply format is two lines so it parses without JSON mode:
 //   line 1: who said the last line ("me" / "them" / "none")
 //   line 2: the whisper (max ~8 words) or "-" for silence
-import type { Hint, Speaker, Utterance } from "@larp/shared";
+import type { Hint, Person, Speaker, Utterance } from "@larp/shared";
 import type { LiveContext } from "./session";
 
 const HISTORY_LINES = 12;
 
-/** Stable per conversation (profile + dossier), so the provider can cache it. */
-export function buildSystem(ctx: LiveContext): string {
-  const { profile: me, person: them } = ctx;
-  const d = them?.dossier;
+/** Stable while the same people are in the conversation, so the provider can cache it. */
+export function buildSystem(ctx: Pick<LiveContext, "profile" | "people" | "event" | "conversation">): string {
+  const { profile: me, people, event } = ctx;
+  const unknowns = ctx.conversation.participants.filter((p) => !p.personId).map((p) => p.name);
+  const group = ctx.conversation.participants.length > 1;
   return [
     "You are a discreet coach whispering into the user's earpiece during a live in-person networking conversation.",
     "",
@@ -22,19 +23,12 @@ export function buildSystem(ctx: LiveContext): string {
           ...me.projects.map((p) => `Project ${p.name}: ${p.description}`),
         ].join("\n")
       : "Unknown.",
+    ...(event ? ["", `THE EVENT: ${event.name}${event.description ? ` (${event.description})` : ""}`] : []),
     "",
-    "THE OTHER PERSON (labeled THEM):",
-    them
-      ? [
-          `${them.name}${them.headline ? `: ${them.headline}` : ""}`,
-          d && `About: ${d.summary}`,
-          d && `Working on: ${d.workingOn.join("; ")}`,
-          d && `Interests: ${d.interests.join("; ")}`,
-          d && `Common ground: ${d.commonGround.join("; ")}`,
-        ]
-          .filter(Boolean)
-          .join("\n")
-      : "Unknown stranger.",
+    group ? "THE OTHER PEOPLE (all labeled THEM; this is a group conversation):" : "THE OTHER PERSON (labeled THEM):",
+    ...people.map(describe),
+    ...(unknowns.length ? [`Not prepped, only know their name: ${unknowns.join(", ")}.`] : []),
+    ...(people.length + unknowns.length === 0 ? ["A stranger. We don't know their name yet."] : []),
     "",
     "The mic can't tell voices apart, so some lines are labeled ?. Infer who said them from context:",
     "questions about the user's work, or things only the user would say about the user's projects, tell you who is talking.",
@@ -45,9 +39,27 @@ export function buildSystem(ctx: LiveContext): string {
     "",
     "Give a hint when THEM just asked the user something, or the user seems stuck.",
     "A hint is the core of a strong answer drawn from the user's profile, or a sharp follow-up question,",
-    "ideally a callback to something about THEM. Plain words, no quotes, no labels, no preamble.",
+    "ideally a callback to something about THEM. Plain words, no quotes, no labels, no bullets, no preamble.",
+    "If you know little about THEM, give a solid networking move instead: ask what they're building,",
+    "find common ground, or (if their name is unknown) get their name.",
+    ...(group ? ["In a group, use names and pull in whoever has been quiet."] : []),
     "If ME said the last line, line 2 is -.",
   ].join("\n");
+}
+
+function describe(p: Person): string {
+  const d = p.dossier;
+  return [
+    `${p.name}${p.headline ? `: ${p.headline}` : ""}`,
+    p.why && `Why they matter: ${p.why}`,
+    d && `About: ${d.summary}`,
+    d && `Working on: ${d.workingOn.join("; ")}`,
+    d && `Interests: ${d.interests.join("; ")}`,
+    d && `Common ground: ${d.commonGround.join("; ")}`,
+    d?.openers.length && `Prepped openers: ${d.openers.join(" | ")}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export function turnPrompt(transcript: Utterance[], hints: Hint[]): string {
@@ -66,8 +78,13 @@ export function parseReply(text: string): { speaker?: Exclude<Speaker, "unknown"
   const [first = "", ...rest] = text.trim().split("\n").map((l) => l.trim()).filter(Boolean);
   const who = first.toLowerCase().replace(/[^a-z]/g, "");
   const speaker = who === "me" ? "me" : who === "them" ? "them" : undefined;
-  const hint = rest.join(" ").replace(/^(line 2:|hint:)\s*/i, "").replace(/^["']|["']$/g, "").trim();
-  return { speaker, hint: hint && hint !== "-" ? hint : undefined };
+  const hint = rest
+    .join(" ")
+    .replace(/^(line 2:|hint:)\s*/i, "")
+    .replace(/^[-*\u2022\u00b7\u2013\u2014]+\s+/, "") // models like to bullet the line
+    .replace(/^["'\u201c]|["'\u201d]$/g, "")
+    .trim();
+  return { speaker, hint: hint && !/^[-.\s]*$/.test(hint) ? hint : undefined };
 }
 
 /** Past hints are listed so the coach doesn't repeat itself. */
