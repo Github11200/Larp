@@ -1,0 +1,17 @@
+/* Chunk 6 owns the look. Use these tokens (bg-bg, text-fg, bg-accent, ...) instead of raw colors,
+   so a restyle later is one edit here, not a sweep through every feature. */
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0b0b10;
+  --color-surface: #16161f;
+  --color-fg: #f4f4f8;
+  --color-muted: #8b8ba0;
+  --color-accent: #b8ff3c;
+  --color-danger: #ff5a5a;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body {
+  @apply bg-bg text-fg font-sans antialiased;
+}

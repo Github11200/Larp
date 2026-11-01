@@ -92,8 +92,10 @@ export class LiveSession implements LiveContext {
     this.stt?.close();
     await Promise.all(this.inflight);
     this.conversation.endedAt = Date.now();
-    await db.conversations.put(this.userId, this.conversation);
-    await this.fanOut("onEnd", (l) => l.onEnd?.(this));
+    if (this.conversation.transcript.length > 0) {
+      await db.conversations.put(this.userId, this.conversation);
+      await this.fanOut("onEnd", (l) => l.onEnd?.(this));
+    }
     this.send({ type: "ended", conversationId: this.conversation.id });
   }
 

@@ -8,7 +8,6 @@ export const followUpsListener: LiveListener = {
   name: "followups",
   async onEnd(ctx) {
     const { conversation, person } = ctx;
-    if (conversation.transcript.length === 0) return;
     // TODO(chunk 5): askJson({ summary, promises, draft }, { model: "smart", prompt: <transcript> }).
     // Stub: lines where you said "I'll ..." count as promises.
     const promises = conversation.transcript.filter((u) => u.speaker === "me" && /\bI('ll| will)\b/i.test(u.text)).map((u) => u.text);
