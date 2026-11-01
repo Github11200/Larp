@@ -117,6 +117,17 @@ test("a caught name that matches an attendee attaches their dossier and whispers
   expect(r.of("openers").at(-1)?.lines[0]).toBe("How do you evaluate LLM features before shipping?");
 });
 
+test("a prepped person who asks something as they introduce themselves gets an answer, not 'That's X'", async () => {
+  const userId = await newUser();
+  const r = recorder();
+  const s = new LiveSession(userId, r.transport, [hintsListener]);
+  await s.handle({ type: "start" });
+  await s.handle({ type: "say", speaker: "unknown", text: "Oh hi, I'm Priya. What are you building?" });
+  await s.stop();
+  expect(s.person?.id).toBe("p-priya");
+  expect(r.of("hint").map((h) => h.text)).not.toContain("That's Priya. Ask about LLM evals");
+});
+
 test("group: tapped people, a caught stranger, primary stays the first prepped person", async () => {
   const userId = await newUser();
   const r = recorder();

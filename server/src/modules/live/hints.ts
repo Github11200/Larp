@@ -98,10 +98,12 @@ export const hintsListener: LiveListener = {
     const newcomer = ctx.people.find((p) => !st.introduced.has(p.id));
     if (newcomer) {
       st.introduced.add(newcomer.id);
-      return whisper(ctx, st, intro(newcomer), true);
+      // A question in the same breath ("I'm Jinay, what are you building?") needs an answer more than an intro.
+      if (!countQuestions(u.text)) return whisper(ctx, st, intro(newcomer), true);
     }
     if (!llmAvailable) return stubHint(ctx, st, u);
     if (u.speaker === "me") return; // you don't need a hint for what you just said
+    if (isReaction(u.text)) return; // "Interesting." / "Of course.": nothing new to answer
     if (early && (await speakEarly(ctx, st, u, early))) return;
     const joinIn = leftOut(ctx, st);
     const urgent = countQuestions(u.text) > 0;
@@ -269,3 +271,5 @@ function stubOpener(ctx: LiveContext, st: HintState): string {
 const lowerFirst = (s: string) => (/^[A-Z][a-z]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
 const isThem = (s: Speaker) => s !== "me";
 const countQuestions = (text: string) => text.split("?").length - 1;
+/** A one- or two-word reaction with no question. */
+const isReaction = (text: string) => !text.includes("?") && (text.match(/[a-z0-9']+/gi)?.length ?? 0) <= 2;

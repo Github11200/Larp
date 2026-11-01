@@ -48,23 +48,24 @@ export function buildSystem(ctx: Pick<LiveContext, "profile" | "people" | "event
     "a question ME already answered, and THEM answering a question ME asked.",
     "If ME said the last line, line 2 is -. Exception: ME only filled (um, good question, yeah so) right after THEM's question; then answer it.",
     "",
-    "HOW TO HINT. The user repeats it word for word, so:",
-    "- One short sentence in the user's own voice, at most 10 words. Plain spoken English, no jargon, no quotes or labels.",
-    "- Facts come only from THE USER above. Never invent numbers, news, names, places, or things the user did or wore.",
-    "- If the profile doesn't cover it (news, opinions, trivia), give a brief honest take or say the user hasn't followed it.",
+    "HOW TO HINT. This is a LARP: make the user sound more impressive than they are. The user repeats it word for word, so:",
+    "- One short sentence in the user's own voice, at most 10 words. Plain spoken English, no quotes or labels.",
+    "- Always yes, always confident. Never 'not really', 'only a bit', or 'not hands-on'. Sound like an expert who's done it.",
+    "- Start from THE USER above and inflate it: bigger numbers, deeper experience, impressive specifics.",
+    "  If the profile doesn't cover it, make up a plausible, specific, impressive answer. A sharp detail beats a vague one.",
     "- Answer directly. Don't add a question back; the user can carry the chat from there.",
-    "  Only a stall/way-in hint, or a hint where the user honestly doesn't know, may be a question.",
+    "  Only a stall or way-in hint may be a question.",
     "- Use the user's work only when it answers what was asked. Never introduce the user twice.",
     "- For a stall with little known about THEM: what they're working on, common ground, or their name.",
     "- Refer to others by name or they/them; never guess gender.",
     ...(group ? ["- In a group, use names; a stall or way-in hint can pull in whoever has been quiet."] : []),
     "",
     "Examples (made-up people, not this conversation):",
-    "THEM: What do you do? -> (the user's role and main project, under 10 words)",
-    "THEM: Did you see the news about that funding round? -> Haven't caught it yet, what happened?",
+    "THEM: What do you do? -> (the user's role and main project, made to sound big, under 10 words)",
+    "THEM: Do you know much about compilers? -> Yeah, I wrote a toy LLVM backend last summer.",
+    "THEM: Did you see the news about that funding round? -> Yeah, I called that raise months ago.",
     "THEM: Mostly robotics stuff for warehouses. -> -",
     "ME: No idea, do you know? / THEM: I think it was huge. -> -",
-    "THEM: Do you use AI in your projects? -> (yes or no, plus one concrete project from the profile)",
   ].join("\n");
 }
 
@@ -123,15 +124,14 @@ export function stallPrompt(transcript: Utterance[], hints: Hint[]): string {
   ].join("\n");
 }
 
-/** The user asked for help: "they just said something, help me respond." Always answers, but never invents facts. */
+/** The user asked for help: "they just said something, help me respond." Always answers, LARP-style. */
 export function nudgePrompt(transcript: Utterance[], hints: Hint[]): string {
   return [
     context(transcript, hints),
     "",
     "The user just asked for help replying to the last line from THEM. Line 1: them.",
     "Line 2: what the user says back, at most 12 words. Always give one, never -.",
-    "Use only facts from the user's profile above. Never invent projects, numbers, names or experience.",
-    "If the profile doesn't cover it, give an honest short line: a plain take, or admit it and ask them back.",
+    "Make the user sound impressive: confident, specific, inflated from their profile; invent plausible details if it doesn't cover it.",
   ].join("\n");
 }
 

@@ -227,7 +227,7 @@ test("left out of a group chat: after 3 lines from others, the coach offers a wa
 
 test("speaking resets the left-out count", async () => {
   const { s } = await session();
-  for (const [speaker, text] of [["them", "One"], ["them", "Two"], ["me", "Totally"], ["them", "Three"]] as const) {
+  for (const [speaker, text] of [["them", "I went to Waterloo."], ["them", "Then I joined a startup."], ["me", "Totally"], ["them", "Now I build robots."]] as const) {
     await s.handle({ type: "say", speaker, text });
     await new Promise((r) => setTimeout(r, 20));
   }
@@ -269,10 +269,23 @@ test("nudges within 1.5s of each other are one ask", async () => {
   await s.stop();
 });
 
-test("the nudge prompt always answers, stays grounded in the profile, and keeps it short", () => {
+test("the nudge prompt always answers, plays it up, and keeps it short", () => {
   const p = nudgePrompt([{ speaker: "them", text: "What's your take on RAG?", at: 1 }], []);
   expect(p).toContain("never -");
   expect(p).toContain("at most 12 words");
-  expect(p).toMatch(/only facts from the user's profile/i);
-  expect(p).toMatch(/never invent/i);
+  expect(p).toMatch(/sound impressive/i);
+  expect(p).not.toMatch(/never invent/i);
+});
+
+test("a short reaction after an answered question doesn't get a second answer (prod: 'Interesting.')", async () => {
+  llm.replies.push({ text: "them\nYeah, I fused LiDAR and camera for a robotics team", delayMs: 0 });
+  const { s, hints } = await session();
+  await s.handle({ type: "say", speaker: "them", text: "Do you know anything about perception?" });
+  await vi.waitFor(() => expect(hints()).toHaveLength(1));
+  vi.useFakeTimers({ now: Date.now() + 8000, toFake: ["Date"] });
+  await s.handle({ type: "say", speaker: "them", text: "Interesting." });
+  await s.stop();
+  vi.useRealTimers();
+  expect(hints()).toHaveLength(1);
+  expect(llm.prompts).toHaveLength(1);
 });
