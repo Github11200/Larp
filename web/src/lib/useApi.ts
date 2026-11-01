@@ -23,19 +23,16 @@ export function useApi<D extends RouteDef>(
   );
 
   useEffect(() => {
-    let stop = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const tick = async () => {
-      const d = await reload();
-      if (!stop && d !== undefined && pollWhile?.(d)) timer = setTimeout(tick, 1500);
-    };
-    void tick();
-    return () => {
-      stop = true;
-      clearTimeout(timer);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void reload();
   }, [reload]);
+
+  // Poll off the latest data, so work started after mount (a manual reload()) is followed too.
+  useEffect(() => {
+    if (data === undefined || !pollWhile?.(data)) return;
+    const timer = setTimeout(() => void reload(), 1500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, reload]);
 
   return { data, error, reload, loading: data === undefined && !error };
 }
