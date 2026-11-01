@@ -40,7 +40,7 @@ export function QuickAdd({ eventId, onAdded }: { eventId?: string; onAdded?: (c:
     return (
       <div className="space-y-2">
         {added && (
-          <p className="text-[15px] text-muted">
+          <p className="text-body text-muted">
             Saved.{" "}
             <Link to={paths.contact(added.id)} className="text-fg underline decoration-line">
               {firstName(added.name)}'s page
