@@ -399,15 +399,16 @@ export class LiveSession implements LiveContext {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms).unref());
 
-const ECHO_WINDOW_MS = 8000;
 const words = (s: string) => s.toLowerCase().match(/[a-z0-9']+/g) ?? [];
+/** An echo lands while the whisper plays (~350ms a word); the user repeating a hint lands after it, and must be kept. */
+const echoWindowMs = (hint: string) => 2500 + 350 * words(hint).length;
 
 /** On a speaker (not earbuds) the mic picks up the whisper; such lines are mostly a recent hint's words. */
 export function isEchoOfHint(text: string, hints: Hint[], now = Date.now()): boolean {
   const said = words(text);
   if (said.length === 0) return false;
   return hints.some((h) => {
-    if (now - h.at > ECHO_WINDOW_MS) return false;
+    if (now - h.at > echoWindowMs(h.text)) return false;
     const hinted = new Set(words(h.text));
     return said.filter((w) => hinted.has(w)).length / said.length >= 0.6;
   });

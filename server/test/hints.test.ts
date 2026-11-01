@@ -1,4 +1,4 @@
-// Hints listener with a scripted LLM: speaker inference, whispering, stale-hint dropping.
+// Hints listener with a scripted LLM: speaker inference, whispering, which hints survive, early question hints.
 import type { ServerMsg } from "@larp/shared";
 import { beforeEach, expect, test, vi } from "vitest";
 import { seedDemo } from "../src/lib/seed";
@@ -43,14 +43,45 @@ test("your own lines never trigger a hint", async () => {
   expect(hints()).toEqual([]);
 });
 
-test("a hint is dropped if the conversation moved on before it was ready", async () => {
-  llm.replies.push({ text: "them\nslow stale hint", delayMs: 50 }, { text: "me\n-", delayMs: 0 });
+test("your filler after their question doesn't cancel the hint", async () => {
+  llm.replies.push({ text: "them\nI build earpieces that coach you live", delayMs: 50 }, { text: "me\n-", delayMs: 0 });
   const { s, hints } = await session();
   await s.handle({ type: "say", speaker: "unknown", text: "What do you do?" });
-  await s.handle({ type: "say", speaker: "unknown", text: "I build earpieces." });
+  await s.handle({ type: "say", speaker: "unknown", text: "Um, good question." });
   await s.stop();
-  expect(hints()).toEqual([]);
+  expect(hints()).toEqual(["I build earpieces that coach you live"]);
   expect(s.conversation.transcript.map((u) => u.speaker)).toEqual(["them", "me"]);
+});
+
+test("an older hint is dropped once a newer line's hint has been spoken", async () => {
+  llm.replies.push({ text: "them\nslow stale hint", delayMs: 80 }, { text: "them\nfresh hint", delayMs: 0 });
+  const { s, hints } = await session();
+  await s.handle({ type: "say", speaker: "unknown", text: "I'm into climbing." });
+  await s.handle({ type: "say", speaker: "unknown", text: "Went to Squamish last week." });
+  await s.stop();
+  expect(hints()).toEqual(["fresh hint"]);
+});
+
+test("a question gets its hint even right after another hint", async () => {
+  llm.replies.push({ text: "them\nThat sounds fun, where do you climb?", delayMs: 0 }, { text: "them\nYeah, Squamish twice a year", delayMs: 0 });
+  const { s, hints } = await session();
+  await s.handle({ type: "say", speaker: "unknown", text: "I'm into climbing." });
+  await vi.waitFor(() => expect(hints()).toHaveLength(1));
+  await s.handle({ type: "say", speaker: "unknown", text: "Have you been to Squamish?" });
+  await s.stop();
+  expect(hints()).toEqual(["That sounds fun, where do you climb?", "Yeah, Squamish twice a year"]);
+});
+
+test("a question mid-line is hinted before the line finishes, and not again when it does", async () => {
+  llm.replies.push({ text: "them\nHonestly I think it'll cut model prices", delayMs: 0 }, { text: "them\nsecond take", delayMs: 0 });
+  const { s, hints } = await session();
+  hintsListener.onPartial!(s, "Did you hear about the IPO?", "unknown");
+  await vi.waitFor(() => expect(hints()).toEqual(["Honestly I think it'll cut model prices"]));
+  expect(llm.prompts[0]).toContain("still being spoken");
+  await s.handle({ type: "say", speaker: "unknown", text: "Did you hear about the IPO? Um, yeah." });
+  await s.stop();
+  expect(hints()).toEqual(["Honestly I think it'll cut model prices"]); // the finished line is labeled, but the cooldown holds
+  expect(llm.prompts).toHaveLength(2);
 });
 
 test("parseReply tolerates model noise", () => {
