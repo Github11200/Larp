@@ -12,12 +12,14 @@ import type {
   ServerMsg,
   Speaker,
   Utterance,
+  Voice,
 } from "@larp/shared";
 import { db, newId } from "../../lib/db";
 import { catchNames, matchAttendee, nameFixer } from "./names";
 import { openersFor } from "./openers";
 import { openStt, sttAvailable, type SttStream } from "./stt";
 import { synthesize } from "./tts";
+import { SelfVoice } from "./voice";
 
 export interface LiveContext {
   readonly userId: string;
@@ -65,6 +67,9 @@ export const STOP_WAIT_MS = 2000;
 const NO_TRANSPORT: Transport = { json() {}, binary() {} };
 /** Conversations in progress, so a reconnecting phone gets the same one back. */
 const open = new Map<string, LiveSession>();
+/** Each user's voice, learned in one conversation and kept for the next (until the server restarts). */
+const selfVoices = new Map<string, SelfVoice>();
+const selfVoiceOf = (userId: string) => selfVoices.get(userId) ?? selfVoices.set(userId, new SelfVoice()).get(userId)!;
 const key = (userId: string, conversationId: string) => `${userId}\u0000${conversationId}`;
 
 /** The session a socket should talk to: the in-progress one it asks to resume, or a fresh one. */
@@ -239,7 +244,7 @@ export class LiveSession implements LiveContext {
     this.stt ??= openStt(
       {
         onPartial: (text, speaker) => this.partial(text, speaker),
-        onCommit: (text, speaker) => this.track(this.commit(text, speaker)),
+        onCommit: (text, speaker, voice) => this.track(this.commit(text, speaker, voice)),
       },
       this.knownNames,
     );
@@ -370,12 +375,14 @@ export class LiveSession implements LiveContext {
     }
   }
 
-  private async commit(raw: string, speaker: Speaker): Promise<void> {
+  private async commit(raw: string, speaker: Speaker, voice?: Voice): Promise<void> {
     const text = this.fixNames(raw);
     const hints = this.conversation.hints;
     if (speaker === "unknown" && isEchoOfHint(text, hints)) return; // the mic heard the coach
     const sayingHint = speaker === "unknown" && repeatsHint(text, hints);
-    const u: Utterance = { speaker: sayingHint ? "me" : speaker, text, at: Date.now() };
+    const u: Utterance = { speaker: sayingHint ? "me" : speaker, text, at: Date.now(), ...(voice && { voice }) };
+    if (sayingHint) selfVoiceOf(this.userId).learn(voice); // certainly the user: learn their voice
+    else if (speaker === "unknown") u.speaker = selfVoiceOf(this.userId).judge(voice) ?? "unknown";
     this.conversation.transcript.push(u);
     this.send({ type: "transcript", speaker: u.speaker, text, final: true, id: this.lineId(u) });
     if (this.started) void this.save(); // snapshot: a server restart mid-chat can resume from here

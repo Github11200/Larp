@@ -24,7 +24,8 @@ for (const c of convos) {
   for (const e of events) {
     if (e.kind === "line") {
       lastLineAt = e.at;
-      console.log(`${clock(e.at, c.startedAt)}  ${e.u.speaker.toUpperCase().padEnd(7)} ${e.u.text}`);
+      const v = e.u.voice ? ` [${e.u.voice.db}dB ${e.u.voice.pitchHz ?? "?"}Hz]` : "";
+      console.log(`${clock(e.at, c.startedAt)}  ${e.u.speaker.toUpperCase().padEnd(7)} ${e.u.text}${v}`);
     } else {
       console.log(`${clock(e.at, c.startedAt)}  >> HINT  ${e.h.text}   (${((e.at - lastLineAt) / 1000).toFixed(1)}s after last line)`);
     }

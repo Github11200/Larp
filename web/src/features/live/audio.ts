@@ -28,6 +28,20 @@ class Pcm extends AudioWorkletProcessor {
 }
 registerProcessor("pcm", Pcm);`;
 
+/**
+ * Auto gain evens out loudness, which hides the best clue to who's talking (the user is nearest the mic).
+ * `?agc=off` turns it off for testing; remembered on this device like `?user=`.
+ */
+const autoGain = (() => {
+  const fromUrl = new URLSearchParams(location.search).get("agc");
+  try {
+    if (fromUrl) localStorage.setItem("larp.agc", fromUrl);
+    return (fromUrl ?? localStorage.getItem("larp.agc")) !== "off";
+  } catch {
+    return fromUrl !== "off";
+  }
+})();
+
 export class LiveAudio {
   private ctx: AudioContext | null = null;
   private micStarted = false;
@@ -45,7 +59,7 @@ export class LiveAudio {
     this.micStarted = true;
     // Asked before any await, so it still counts as part of the tap.
     const streamP = navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: autoGain },
     });
     try {
       const stream = await streamP;

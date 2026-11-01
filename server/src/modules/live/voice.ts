@@ -1,0 +1,111 @@
+// Chunk 1 · Tells the user's voice from everyone else's. Scribe realtime can't (speaker_id is always empty),
+// so each line gets a cheap voiceprint (pitch + loudness) and is compared with lines known to be the user's.
+import type { Speaker, Voice } from "@larp/shared";
+
+// Voice.db: loudness of voiced frames (dBFS). The phone is nearer the user's mouth, so they're usually louder.
+// Voice.pitchHz: median pitch of voiced frames; undefined if too little voicing to tell.
+
+const FRAME = 1024; // 64ms at 16kHz: room for the longest pitch period plus a comparison window
+const WINDOW = 512;
+const MIN_HZ = 70;
+const MAX_HZ = 400;
+/** Below this a frame is silence or room noise, not speech. */
+const VOICED_DB = -50;
+/** YIN: a dip below this in the normalized difference is a pitch period. */
+const YIN_THRESHOLD = 0.15;
+/** No dip below this anywhere = unvoiced (breath, "s", noise). */
+const YIN_UNVOICED = 0.35;
+const MIN_PITCHED_FRAMES = 5;
+
+/** Voiceprint of a stretch of 16-bit mono PCM. */
+export function measureVoice(pcm: Int16Array, sampleRate: number): Voice | undefined {
+  const loud: number[] = [];
+  const pitches: number[] = [];
+  for (let i = 0; i + FRAME <= pcm.length; i += FRAME) {
+    const frame = pcm.subarray(i, i + FRAME);
+    const db = dbfs(frame);
+    if (db < VOICED_DB) continue;
+    loud.push(db);
+    const hz = pitch(frame, sampleRate);
+    if (hz) pitches.push(hz);
+  }
+  if (loud.length === 0) return undefined;
+  return { db: round(median(loud)), pitchHz: pitches.length >= MIN_PITCHED_FRAMES ? round(median(pitches)) : undefined };
+}
+
+function dbfs(frame: Int16Array): number {
+  let sum = 0;
+  for (const s of frame) sum += s * s;
+  return 20 * Math.log10(Math.sqrt(sum / frame.length) / 32768 || 1e-9);
+}
+
+/** YIN pitch (de Cheveigné & Kawahara): the first period whose normalized self-difference dips low. Resists octave errors. */
+function pitch(frame: Int16Array, sampleRate: number): number | undefined {
+  const minLag = Math.floor(sampleRate / MAX_HZ);
+  const maxLag = Math.min(Math.ceil(sampleRate / MIN_HZ), frame.length - WINDOW);
+  const d = new Float64Array(maxLag + 1);
+  for (let lag = 1; lag <= maxLag; lag++) {
+    let sum = 0;
+    for (let i = 0; i < WINDOW; i++) {
+      const diff = frame[i] - frame[i + lag];
+      sum += diff * diff;
+    }
+    d[lag] = sum;
+  }
+  let running = 0;
+  let best = Infinity;
+  let bestLag = 0;
+  for (let lag = 1; lag <= maxLag; lag++) {
+    running += d[lag];
+    const norm = running ? (d[lag] * lag) / running : 1;
+    d[lag] = norm;
+    if (lag < minLag) continue;
+    if (norm < best) [best, bestLag] = [norm, lag];
+  }
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    if (d[lag] >= YIN_THRESHOLD) continue;
+    while (lag + 1 <= maxLag && d[lag + 1] < d[lag]) lag++; // slide to the bottom of the dip
+    return sampleRate / lag;
+  }
+  return best < YIN_UNVOICED ? sampleRate / bestLag : undefined;
+}
+
+// Tolerances, kept wide on purpose: a line's median pitch swings ~25% with intonation (questions rise),
+// so only clear cases are judged here and the rest are left to the transcript.
+const SAME_PITCH = 0.12;
+const OTHER_PITCH = 0.35;
+/** Same voice within this loudness; this much quieter means farther from the phone, i.e. not the user. */
+const SAME_DB = 4;
+const QUIETER_DB = 8;
+/** Lines of the user's voice needed before judging others against it. */
+const MIN_SAMPLES = 1;
+
+/** The user's voice, learned during a conversation from lines known to be theirs. */
+export class SelfVoice {
+  private samples: Voice[] = [];
+
+  learn(v: Voice | undefined): void {
+    if (v) this.samples.push(v);
+  }
+
+  /** "me" / "them" when the voice clearly matches or doesn't; undefined leaves it to the transcript. */
+  judge(v: Voice | undefined): Exclude<Speaker, "unknown"> | undefined {
+    if (!v || this.samples.length < MIN_SAMPLES) return undefined;
+    const db = median(this.samples.map((s) => s.db));
+    const hzs = this.samples.flatMap((s) => (s.pitchHz ? [s.pitchHz] : []));
+    const hz = hzs.length ? median(hzs) : undefined;
+    const drift = hz && v.pitchHz ? Math.abs(v.pitchHz - hz) / hz : undefined;
+    if (drift !== undefined && drift > OTHER_PITCH) return "them";
+    if (v.db < db - QUIETER_DB) return "them";
+    if (drift !== undefined && drift < SAME_PITCH && v.db >= db - SAME_DB) return "me";
+    return undefined;
+  }
+}
+
+function median(xs: number[]): number {
+  const s = [...xs].sort((a, b) => a - b);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+const round = (x: number) => Math.round(x * 10) / 10;
