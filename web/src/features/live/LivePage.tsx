@@ -10,8 +10,8 @@ export function LivePage() {
   const live = useLive(params.get("person") ?? undefined);
   const navigate = useNavigate();
 
-  const end = () => {
-    live.stop();
+  const end = async () => {
+    await live.stop();
     navigate(paths.followUps());
   };
 
@@ -36,7 +36,7 @@ export function LivePage() {
         </button>
       )}
 
-      <div className="rounded-2xl bg-surface p-5 text-2xl font-semibold text-accent min-h-24">
+      <div data-testid="hint" className="rounded-2xl bg-surface p-5 text-2xl font-semibold text-accent min-h-24">
         {live.hint ?? "Listening…"}
       </div>
 

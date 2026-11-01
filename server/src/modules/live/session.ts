@@ -83,6 +83,7 @@ export class LiveSession implements LiveContext {
     let firstAudio = 0;
     try {
       for await (const chunk of synthesize(text)) {
+        if (this.ended) break; // nobody is listening anymore; don't hold up saving
         firstAudio ||= Date.now() - t0;
         this.transport.binary(chunk);
       }

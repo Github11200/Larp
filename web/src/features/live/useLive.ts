@@ -20,6 +20,7 @@ export function useLive(personId?: string) {
   const [mic, setMic] = useState<"off" | "on" | "blocked">("off");
   const player = useRef<WhisperPlayer>(null);
   const stopMic = useRef<() => void>(null);
+  const onEnded = useRef<() => void>(null);
 
   useEffect(() => {
     const socket = new WebSocket(liveUrl());
@@ -44,6 +45,7 @@ export function useLive(personId?: string) {
         case "person":
           return setPerson(msg.name);
         case "ended":
+          onEnded.current?.();
           return setStatus("ended");
         case "error":
           return console.warn("[live]", msg.message);
@@ -90,7 +92,13 @@ export function useLive(personId?: string) {
     turnOnMic,
     dismissCard: () => setCard(undefined),
     say: (speaker: Speaker, text: string) => send({ type: "say", speaker, text }),
-    stop: () => send({ type: "stop" }),
+    /** Resolves once the server has saved the conversation, so follow-ups exist when you look. */
+    stop: () =>
+      new Promise<void>((resolve) => {
+        onEnded.current = resolve;
+        setTimeout(resolve, 3000); // don't strand the user if the socket is gone
+        send({ type: "stop" });
+      }),
   };
 }
 

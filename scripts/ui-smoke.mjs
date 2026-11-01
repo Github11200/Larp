@@ -33,7 +33,7 @@ await input.press("Enter");
 await page.getByText("Larp Coach demo").waitFor();
 await shot("3-linkcard");
 await page.getByText("tap to dismiss").click();
-await page.getByText("Then ask:").waitFor();
+await page.getByTestId("hint").filter({ hasNotText: "Listening…" }).waitFor(); // stub or real LLM hint
 await input.fill("Sure, I'll send you the deck");
 await page.getByRole("button", { name: "me", exact: true }).click();
 await shot("4-live");
