@@ -16,6 +16,8 @@ export interface LiveContext {
   whisper(text: string): Promise<void>;
   /** Pop a link card on screen. Repeats of the same URL are ignored. */
   shareLink(link: Link): void;
+  /** Correct who said a line. The mic can't tell speakers apart, so lines start as "unknown". */
+  setSpeaker(u: Utterance, speaker: Speaker): void;
 }
 
 export interface LiveListener {
@@ -84,6 +86,10 @@ export class LiveSession implements LiveContext {
     if (this.conversation.linksShared.some((l) => l.url === link.url)) return;
     this.conversation.linksShared.push(link);
     this.send({ type: "link_card", link });
+  }
+
+  setSpeaker(u: Utterance, speaker: Speaker): void {
+    u.speaker = speaker; // u is the transcript entry itself, so the saved conversation sees it
   }
 
   async stop(): Promise<void> {

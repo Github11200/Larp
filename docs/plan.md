@@ -1,7 +1,7 @@
 # Build plan
 
 General direction per chunk. Whoever picks up a chunk owns the details.
-How the chunks connect (folders, contracts, rules): **[`integration.md`](integration.md)**. Every chunk already has a working stub, so start by replacing yours.
+How the chunks connect (folders, contracts, rules): `[integration.md](integration.md)`. Every chunk already has a working stub, so start by replacing yours.
 
 ## Stack at a glance
 
@@ -11,14 +11,18 @@ How the chunks connect (folders, contracts, rules): **[`integration.md`](integra
 - **Voice:** ElevenLabs Scribe realtime (listening) + Flash TTS (whispering).
 - **Brains:** LLM provider TBD (kept swappable in `server/src/lib/llm.ts`). Fast model for live hints, stronger model for prep and dossiers.
 
-| Render piece | Used for |
-|---|---|
-| Static Site | The web app |
-| Web Service | Live conversation (WebSocket) + API |
-| Background Worker | Event + people prep |
-| Key Value | Job queue for prep |
-| Postgres | Everything we store |
-| Cron Job | Follow-up nudges |
+
+| Render piece      | Used for                            |
+| ----------------- | ----------------------------------- |
+| Static Site       | The web app                         |
+| Web Service       | Live conversation (WebSocket) + API |
+| Background Worker | Event + people prep                 |
+| Key Value         | Job queue for prep                  |
+| Postgres          | Everything we store                 |
+| Cron Job          | Follow-up nudges                    |
+
+
+
 
 ## Guiding principles
 
@@ -26,6 +30,8 @@ How the chunks connect (folders, contracts, rules): **[`integration.md`](integra
 - **One-tap simple.** Paste your links, paste the event, press Start.
 - **Funny first, useful second.** Meme-y tone in copy, voice, and demo.
 - **Deployed early.** Everything runs on Render from day one, not just at the end.
+
+
 
 ## Order
 
@@ -36,6 +42,8 @@ How the chunks connect (folders, contracts, rules): **[`integration.md`](integra
 5. Chunk 7 runs alongside from the start.
 
 ---
+
+
 
 ## Chunk 0 · Foundations ✅ (except first deploy)
 
@@ -74,7 +82,7 @@ When someone asks for your demo, LinkedIn, GitHub, etc., the right link pops up 
 
 **Done when:** saying "do you have a demo?" shows the card almost immediately.
 
-## Chunk 3 · Knowledge base (you)
+## Chunk 3 · Knowledge base (you) 
 
 Turn your resume and links into a profile every other feature uses.
 
@@ -86,7 +94,7 @@ Turn your resume and links into a profile every other feature uses.
 
 **Done when:** a real teammate's profile is built from their actual links.
 
-## Chunk 4 · Event + people prep (them)
+## Chunk 4 · Event + people prep
 
 Find out who's at the event, rank who's worth meeting, and build dossiers.
 
