@@ -11,13 +11,18 @@ export function useApi<D extends RouteDef>(
 ) {
   const [data, setData] = useState<ResOf<D>>();
   const [error, setError] = useState<string>();
+  /** Failed fetches in a row. Bumping it re-arms the poll, so one dropped request can't freeze a pending screen. */
+  const [failures, setFailures] = useState(0);
   const key = JSON.stringify(params ?? {});
 
   const reload = useCallback(
     () =>
       call(def, { params })
-        .then((d) => (setData(d), setError(undefined), d))
-        .catch((e: Error) => void setError(e.message)),
+        .then((d) => (setData(d), setError(undefined), setFailures(0), d))
+        .catch((e: Error) => {
+          setError(e.message);
+          setFailures((n) => n + 1);
+        }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [def, key],
   );
@@ -27,12 +32,14 @@ export function useApi<D extends RouteDef>(
   }, [reload]);
 
   // Poll off the latest data, so work started after mount (a manual reload()) is followed too.
+  // After a failed fetch our copy may be stale, so retry with backoff (cold server, venue wifi blip) until one lands.
   useEffect(() => {
-    if (data === undefined || !pollWhile?.(data)) return;
-    const timer = setTimeout(() => void reload(), 1500);
+    const keepGoing = failures > 0 || (data !== undefined && pollWhile?.(data));
+    if (!keepGoing) return;
+    const timer = setTimeout(() => void reload(), Math.min(1500 * 2 ** failures, 15000));
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, reload]);
+  }, [data, failures, reload]);
 
   return { data, error, reload, loading: data === undefined && !error };
 }

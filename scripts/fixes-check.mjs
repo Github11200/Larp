@@ -62,6 +62,24 @@ console.log(`profile after demo shortcut: ${after?.name}`);
 if (after?.name !== "Nonit Real") fail("demo shortcut overwrote the profile");
 await page.screenshot({ path: `${shots}fix-after-demo.png` });
 
+// 3. Polling survives dropped requests: kill the first two profile polls, the build still lands.
+let dropped = 0;
+let building = false;
+await page.route("**/api/profile", (route) =>
+  route.request().method() === "GET" && dropped < 2 && building ? (dropped++, route.abort()) : route.continue(),
+);
+await page.goto(`${base}/profile?user=poll-${Date.now()}`);
+await page.getByPlaceholder(/github.com\/you/).fill("github.com/octocat\nI like cats");
+building = true;
+await page.getByRole("button", { name: "Learn me", exact: true }).click();
+await page
+  .getByText("This is what the coach knows about you")
+  .waitFor({ timeout: 60000 })
+  .catch(() => fail("profile never finished building"));
+console.log(`profile built after ${dropped} dropped polls`);
+if (dropped < 2) fail("didn't drop any polls; test proved nothing");
+await page.screenshot({ path: `${shots}fix-profile-built.png` });
+
 await browser.close();
 if (errors.length) fail("browser errors:\n" + errors.join("\n"));
 console.log(process.exitCode ? "fixes check FAILED" : `fixes check ok, screenshots in ${shots}`);
