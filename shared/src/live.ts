@@ -18,6 +18,8 @@ export const ClientMsg = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("start"),
     personId: z.string().optional(),
+    /** The event you're at (the screen you went live from). Default: the person's event, else the newest. */
+    eventId: z.string().optional(),
     /** Resume this conversation (page refresh, network blip) instead of starting a new one. */
     conversationId: z.string().optional(),
   }),
