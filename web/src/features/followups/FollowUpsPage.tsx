@@ -1,10 +1,9 @@
-// Chunk 5 · After the event: who's due a text, then every conversation grouped by event.
-// Named people get follow-ups (promises + draft); unnamed chats stay as notes until you say who it was.
+// Chunk 5 · After the event: who's due a text, and every chat's write-up.
+// Each event's Recap shows its own slice (FollowUpList); /followups shows them all, grouped by event.
 import { api, type Conversation, type FollowUp } from "@larp/shared";
 import { BellRing } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router";
-import { Button, ButtonLink, firstName, Pending, SectionLabel, Title } from "../../components/ui";
+import { Link } from "react-router";
+import { Button, firstName, Pending, SectionLabel, Title } from "../../components/ui";
 import { call } from "../../lib/api";
 import { useApi } from "../../lib/useApi";
 import { paths } from "../../routes";
@@ -14,79 +13,79 @@ import { announceChange, conversationsOf, isDue } from "./shared";
 
 export function FollowUpsPage() {
   const followUps = useApi(api.listFollowUps, undefined, (l) => l.some((f) => f.notesStatus === "pending"));
-  // End doesn't wait forever for the server, so the chat you just left may land a few seconds after this page opens.
-  const after = useSearchParams()[0].get("after");
-  const [openedAt] = useState(Date.now);
-  const awaiting = (l: Conversation[]) => !!after && !l.find((c) => c.id === after)?.notes && Date.now() - openedAt < 30_000;
-  const convs = useApi(api.listConversations, undefined, (l) => awaiting(l) || l.some((c) => c.notes?.status === "pending"));
-  const landed = !!after && !!convs.data?.find((c) => c.id === after)?.notes;
-  useEffect(() => {
-    if (landed) void followUps.reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [landed]);
+  const convs = useApi(api.listConversations, undefined, (l) => l.some((c) => c.notes?.status === "pending"));
   const events = useApi(api.listEvents);
-
-  const reload = () => {
-    void followUps.reload();
-    void convs.reload();
-    announceChange();
-  };
-  const weekLater = async () => {
-    await call(api.runNudges);
-    reload();
-  };
+  const reload = () => (void followUps.reload(), void convs.reload(), announceChange());
 
   if (followUps.loading || convs.loading) return <Pending>Remembering who you met…</Pending>;
   const fs = followUps.data ?? [];
   const cs = convs.data ?? [];
-  const groups = groupByEvent(fs, cs, (id) => events.data?.find((e) => e.id === id)?.name);
+  const groups = groupByEvent(fs, cs);
 
   return (
     <div className="space-y-10">
-      <Title sub="Who you met, what you promised, and the texts you'd never send on your own. You just hit send.">Follow-ups</Title>
+      <Title>Follow-ups</Title>
       {groups.length === 0 ? (
-        <div className="space-y-4 border border-dashed border-line p-5">
-          <p className="text-[16px] text-pretty">Nobody yet. Talk to someone and the follow-ups write themselves.</p>
-          <ButtonLink to={paths.live()} variant="secondary">
-            Go live
-          </ButtonLink>
-        </div>
+        <p className="text-body text-muted">Nobody yet. Talk to someone and these write themselves.</p>
       ) : (
         <>
           <DueNow followUps={fs.filter(isDue)} />
-          {groups.map((g) => (
-            <section key={g.key} className="space-y-6">
-              <h2 className="border-b border-line pb-2 font-serif text-[1.35rem] text-muted">{g.name}</h2>
-              <ul className="space-y-10">
-                {g.open.map((f) => (
-                  <li key={f.id}>
-                    <FollowUpCard followUp={f} conversations={conversationsOf(f, cs)} onChange={reload} />
-                  </li>
-                ))}
-                {g.notes.map((c) => (
-                  <li key={c.id}>
-                    <NotesCard conversation={c} onChange={reload} />
-                  </li>
-                ))}
-                {g.done.map((f) => (
-                  <li key={f.id}>
-                    <FollowUpCard followUp={f} conversations={conversationsOf(f, cs)} onChange={reload} />
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
-          <Button variant="ghost" className="w-full" onClick={weekLater}>
-            Skip to a week later
-          </Button>
+          {groups.map((g) => {
+            const name = events.data?.find((e) => e.id === g.eventId)?.name ?? "Off the record";
+            return (
+              <section key={g.eventId ?? "none"} className="space-y-6">
+                <h2 className="border-b border-line pb-2 text-title text-muted">
+                  {g.eventId ? <Link to={paths.event(g.eventId, "recap")}>{name}</Link> : name}
+                </h2>
+                <FollowUpList followUps={g.followUps} conversations={cs} eventChats={g.chats} onChange={reload} />
+              </section>
+            );
+          })}
+          <WeekLater onDone={reload} />
         </>
       )}
     </div>
   );
 }
 
+/** One event's after-party: people to text, then unnamed chats, then the ones already sent. */
+export function FollowUpList({
+  followUps,
+  conversations,
+  eventChats,
+  onChange,
+}: {
+  followUps: FollowUp[];
+  /** Every conversation, so follow-ups can show what was said. */
+  conversations: Conversation[];
+  /** This event's chats; the ones no follow-up claims show as notes. */
+  eventChats: Conversation[];
+  onChange: () => void;
+}) {
+  const sorted = [...followUps].sort((a, b) => a.dueAt - b.dueAt);
+  const claimed = new Set(followUps.flatMap((f) => conversationsOf(f, conversations).map((c) => c.id)));
+  // Notes exist only once a chat ends; live mode also saves chats still in progress.
+  const notes = eventChats.filter((c) => !claimed.has(c.id) && c.notes);
+  const card = (f: FollowUp) => (
+    <li key={f.id} id={`f-${f.id}`}>
+      <FollowUpCard followUp={f} conversations={conversationsOf(f, conversations)} onChange={onChange} />
+    </li>
+  );
+  return (
+    <ul className="space-y-10">
+      {sorted.filter((f) => f.status !== "done").map(card)}
+      {notes.map((c) => (
+        <li key={c.id}>
+          <NotesCard conversation={c} onChange={onChange} />
+        </li>
+      ))}
+      {sorted.filter((f) => f.status === "done").map(card)}
+    </ul>
+  );
+}
+
 /** The nudge: "you told Sam you'd send the deck", one tap from the drafted text. */
-function DueNow({ followUps }: { followUps: FollowUp[] }) {
+export function DueNow({ followUps }: { followUps: FollowUp[] }) {
   if (!followUps.length) return null;
   return (
     <section className="space-y-3 border border-live/60 p-4" data-testid="due-now">
@@ -99,7 +98,7 @@ function DueNow({ followUps }: { followUps: FollowUp[] }) {
       <ul className="space-y-3">
         {followUps.map((f) => (
           <li key={f.id}>
-            <a href={`#f-${f.id}`} className="block font-serif text-[1.35rem] leading-[1.2] text-pretty">
+            <a href={`#f-${f.id}`} className="block text-title text-pretty">
               {f.promises[0]
                 ? `You told ${firstName(f.personName)} you'd ${f.promises[0]}.`
                 : `Text ${firstName(f.personName)} before they forget your face.`}
@@ -111,33 +110,34 @@ function DueNow({ followUps }: { followUps: FollowUp[] }) {
   );
 }
 
-interface Group {
-  key: string;
-  name: string;
-  open: FollowUp[];
-  notes: Conversation[];
-  done: FollowUp[];
-  latest: number;
+/** Demo shortcut: run the nudge cron now, as if a week went by. */
+export function WeekLater({ onDone }: { onDone: () => void }) {
+  return (
+    <Button variant="ghost" className="w-full" onClick={() => void call(api.runNudges).then(onDone)}>
+      Skip to a week later
+    </Button>
+  );
 }
 
-/** Newest event first; inside it, people to text, then unnamed chats, then the ones already sent. */
-function groupByEvent(fs: FollowUp[], cs: Conversation[], eventName: (id: string) => string | undefined): Group[] {
-  const groups = new Map<string, Group>();
-  const group = (eventId: string | undefined, at: number) => {
+/** Newest event first. */
+function groupByEvent(fs: FollowUp[], cs: Conversation[]) {
+  const groups = new Map<string, { eventId?: string; followUps: FollowUp[]; chats: Conversation[]; latest: number }>();
+  const group = (eventId: string | undefined) => {
     const key = eventId ?? "none";
-    const g = groups.get(key) ?? { key, name: (eventId && eventName(eventId)) || "Off the record", open: [], notes: [], done: [], latest: 0 };
-    g.latest = Math.max(g.latest, at);
+    const g = groups.get(key) ?? { eventId, followUps: [], chats: [], latest: 0 };
     groups.set(key, g);
     return g;
   };
-  const claimed = new Set(fs.flatMap((f) => conversationsOf(f, cs).map((c) => c.id)));
-  for (const f of [...fs].sort((a, b) => a.dueAt - b.dueAt)) {
-    const at = conversationsOf(f, cs)[0]?.startedAt ?? 0;
-    group(f.eventId, at)[f.status === "done" ? "done" : "open"].push(f);
+  for (const f of fs) {
+    const g = group(f.eventId);
+    g.followUps.push(f);
+    g.latest = Math.max(g.latest, conversationsOf(f, cs)[0]?.startedAt ?? 0);
   }
-  for (const c of [...cs].sort((a, b) => b.startedAt - a.startedAt)) {
-    // Notes exist only once a chat ends; live mode also saves chats still in progress.
-    if (!claimed.has(c.id) && c.notes) group(c.eventId, c.startedAt).notes.push(c);
+  for (const c of cs) {
+    if (!c.notes) continue;
+    const g = group(c.eventId);
+    g.chats.push(c);
+    g.latest = Math.max(g.latest, c.startedAt);
   }
   return [...groups.values()].sort((a, b) => b.latest - a.latest);
 }

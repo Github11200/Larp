@@ -69,6 +69,7 @@ export function Row({
   title,
   meta,
   trail,
+  chevron = true,
 }: {
   to?: string;
   onClick?: () => void;
@@ -76,6 +77,8 @@ export function Row({
   title: ReactNode;
   meta?: ReactNode;
   trail?: ReactNode;
+  /** Off when `trail` already says what a tap does. */
+  chevron?: boolean;
 }) {
   const body = (
     <>
@@ -85,7 +88,7 @@ export function Row({
         {meta && <span className="mt-0.5 line-clamp-2 block text-meta text-muted">{meta}</span>}
       </span>
       {trail}
-      {(to || onClick) && <ChevronRight size={16} strokeWidth={1.75} className="shrink-0 text-muted" aria-hidden />}
+      {chevron && (to || onClick) && <ChevronRight size={16} strokeWidth={1.75} className="shrink-0 text-muted" aria-hidden />}
     </>
   );
   const cls = "flex w-full items-center gap-3 py-3 text-left active:bg-raise";

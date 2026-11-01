@@ -4,7 +4,7 @@ export type SetupStep = "you" | "event" | "people";
 export type Stage = "prep" | "live" | "recap";
 
 export const paths = {
-  /** The newest event and its people. */
+  /** Redirects to the event that matters right now (today's, else the newest). */
   home: () => "/",
   /** First-run walkthrough; no step = the welcome screen. */
   setup: (step?: SetupStep) => (step ? `/setup/${step}` : "/setup"),
@@ -12,8 +12,7 @@ export const paths = {
   events: () => "/events",
   /** The event hub; no stage = whichever fits the event's date and what's happened. */
   event: (id: string, stage?: Stage) => (stage ? `/events/${id}/${stage}` : `/events/${id}`),
-  /** Opens the add-event form on the home screen. */
-  newEvent: () => "/?new=1",
+  newEvent: () => "/events/new",
   /** One event's entry for someone (their dossier for that event). */
   person: (id: string) => `/people/${id}`,
   /** Everyone you've prepped or met, across events. */

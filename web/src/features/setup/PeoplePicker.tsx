@@ -55,7 +55,7 @@ function Picker({ event }: { event: Event }) {
           <Button onClick={() => finish(paths.live({ personId: [...chosen][0], eventId: event.id }))}>
             Go live{chosen.size ? ` with ${chosen.size} dossier${chosen.size > 1 ? "s" : ""} cooking` : ""}
           </Button>
-          <Button variant="secondary" onClick={() => finish(paths.home())}>
+          <Button variant="secondary" onClick={() => finish(paths.event(event.id, "prep"))}>
             Read the dossiers first
           </Button>
         </>

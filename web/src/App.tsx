@@ -1,13 +1,16 @@
 // Chunk 6 · Route table + app shell. Feature screens live in src/features/<chunk>.
+// The event hub (/events/:id/:stage) is the spine: prep, live and recap all hang off it.
 import { BrowserRouter, Route, Routes } from "react-router";
 import { FirstRunGate } from "./components/FirstRunGate";
 import { Layout } from "./components/Layout";
 import { ContactPage } from "./features/contacts/ContactPage";
 import { ContactsPage } from "./features/contacts/ContactsPage";
+import { EventHub } from "./features/event/EventHub";
+import { HomePage } from "./features/event/HomePage";
 import { FollowUpsPage } from "./features/followups/FollowUpsPage";
 import { LivePage } from "./features/live/LivePage";
 import { EventsListPage } from "./features/prep/EventsListPage";
-import { EventsPage } from "./features/prep/EventsPage";
+import { NewEventPage } from "./features/prep/EventsPage";
 import { PersonPage } from "./features/prep/PersonPage";
 import { ProfilePage } from "./features/profile/ProfilePage";
 import { SetupPage } from "./features/setup/SetupPage";
@@ -21,12 +24,13 @@ export function App() {
             index
             element={
               <FirstRunGate>
-                <EventsPage />
+                <HomePage />
               </FirstRunGate>
             }
           />
           <Route path="events" element={<EventsListPage />} />
-          <Route path="events/:id" element={<EventsPage />} />
+          <Route path="events/new" element={<NewEventPage />} />
+          <Route path="events/:id/:stage?" element={<EventHub />} />
           <Route path="contacts" element={<ContactsPage />} />
           <Route path="contacts/:id" element={<ContactPage />} />
           <Route path="profile" element={<ProfilePage />} />
