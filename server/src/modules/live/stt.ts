@@ -11,6 +11,8 @@ export interface SttEvents {
   onPartial(text: string, speaker: Speaker): void;
   /** A finished segment. Hints key off this. */
   onCommit(text: string, speaker: Speaker, voice?: Voice): void;
+  /** The upstream STT connection died unexpectedly. The session should null its reference so a reconnect reopens it. */
+  onDead?(): void;
 }
 
 export interface SttStream {
@@ -100,6 +102,14 @@ export function openStt(events: SttEvents, names: string[] = []): SttStream | nu
   });
   ws.on("error", (e) => console.error("[stt]", e.message));
 
+  let intentional = false;
+  ws.on("close", () => {
+    if (!intentional) {
+      console.warn("[stt] upstream closed unexpectedly");
+      events.onDead?.();
+    }
+  });
+
   return {
     write(pcm) {
       if (ready) {
@@ -107,6 +117,7 @@ export function openStt(events: SttEvents, names: string[] = []): SttStream | nu
       } else if (ws.readyState <= WebSocket.OPEN) pending.push(pcm);
     },
     close() {
+      intentional = true;
       clearTimeout(untimed);
       ws.close();
     },

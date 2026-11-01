@@ -21,16 +21,16 @@ export function SetupPage() {
 }
 
 function YouStep() {
-  const profile = useApi(api.getProfile, undefined, (p) => !p);
-  const started = Boolean(profile.data);
+  const profile = useApi(api.getProfile, undefined, (p) => !p || p.status === "pending");
+  const p = profile.data;
+  const hasContent = Boolean(p && (p.name || p.links.length));
   return (
     <SetupFrame
       step="you"
       back={paths.setup()}
       actions={
-        // Profile builds in the background, so nobody waits on it.
-        <ButtonLink to={paths.setup("event")} variant={started ? "primary" : "ghost"}>
-          {started ? "Next: your event" : "Skip, I'll do this later"}
+        <ButtonLink to={paths.setup("event")} variant={hasContent ? "primary" : "ghost"}>
+          {hasContent ? "Next: your event" : "Skip, I'll do this later"}
         </ButtonLink>
       }
     >
