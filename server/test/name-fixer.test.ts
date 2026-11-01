@@ -12,6 +12,7 @@ test("misheard known names snap to their spelling", () => {
   expect(fix("Sounds good, Janae, see you later")).toBe("Sounds good, Jinay, see you later");
   expect(fix("Meet Janae Shaw")).toBe("Meet Jinay Shah");
   expect(fix("hey pria")).toBe("hey Priya");
+  expect(fix("this is my friend Jinae. Jinae works with Priya.")).toBe("this is my friend Jinay. Jinay works with Priya.");
   expect(fix("I'm Nonit")).toBe("I'm Nonit");
 });
 

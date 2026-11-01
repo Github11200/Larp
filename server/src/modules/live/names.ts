@@ -132,6 +132,7 @@ export function nameFixer(known: string[]): (text: string) => string {
 function fixNames(text: string, names: KnownName[]): string {
   const words = [...text.matchAll(/\p{L}+/gu)].map((m) => ({ text: m[0], at: m.index, end: m.index + m[0].length }));
   const edits: { at: number; end: number; to: string }[] = [];
+  const heard = new Map<string, KnownName>(); // a mishearing fixed once is fixed again, even where it lacks a cue
   for (let i = 0; i < words.length; i++) {
     const w = words[i];
     const next = words[i + 1];
@@ -139,9 +140,11 @@ function fixNames(text: string, names: KnownName[]): string {
     const pair = next && /^\s+$/.test(text.slice(w.end, next.at)) ? next : undefined;
     const pairOk = pair && (cued || (isCap(w.text) && isCap(pair.text)));
     const twoWord = pairOk ? closest(w.text + pair.text, names) : undefined;
-    const name = twoWord ?? (cued || (isCap(w.text) && midSentence(text, w.at)) ? closest(w.text, names) : undefined);
+    const oneWord = cued || (isCap(w.text) && midSentence(text, w.at)) ? closest(w.text, names) : heard.get(w.text);
+    const name = twoWord ?? oneWord;
     if (!name || NOT_NAMES.has(w.text.toLowerCase())) continue;
     const used = twoWord ? 2 : 1;
+    if (!twoWord) heard.set(w.text, name);
     let end = words[i + used - 1].end;
     let to = name.first;
     const lastWord = words[i + used];
