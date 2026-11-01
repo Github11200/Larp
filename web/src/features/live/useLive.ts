@@ -92,6 +92,8 @@ export function useLive(personId?: string) {
     turnOnMic,
     dismissCard: () => setCard(undefined),
     say: (speaker: Speaker, text: string) => send({ type: "say", speaker, text }),
+    /** Switch who you're talking to mid-session (their dossier powers the hints). */
+    talkTo: (personId: string) => send({ type: "set_person", personId }),
     /** Resolves once the server has saved the conversation, so follow-ups exist when you look. */
     stop: () =>
       new Promise<void>((resolve) => {

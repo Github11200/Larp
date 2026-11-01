@@ -28,7 +28,8 @@ await page.getByText("Say this").waitFor();
 await shot("2-person");
 
 await page.getByText("Talk to Sam").click();
-await page.getByText("live with Sam Chen").waitFor();
+await page.getByText("Talking to Sam Chen").waitFor();
+await page.getByRole("button", { name: "Type instead of talking" }).click();
 const input = page.getByPlaceholder("type what someone says…");
 await input.fill("Do you have a demo?");
 await input.press("Enter");
