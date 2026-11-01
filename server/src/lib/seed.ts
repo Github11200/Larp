@@ -8,3 +8,10 @@ export async function seedDemo(userId: string): Promise<void> {
   await db.events.put(userId, demoEvent);
   for (const p of demoPeople) await db.people.put(userId, p);
 }
+
+export async function resetUser(userId: string, keepProfile = false): Promise<void> {
+  for (const [name, coll] of Object.entries(db)) {
+    if (keepProfile && name === "profiles") continue;
+    for (const doc of await coll.list(userId)) await coll.remove(userId, doc.id);
+  }
+}

@@ -4,7 +4,7 @@ import cors from "cors";
 import express, { Router } from "express";
 import { env } from "./env";
 import { handle } from "./http/route";
-import { seedDemo } from "./lib/seed";
+import { resetUser, seedDemo } from "./lib/seed";
 import { contactRoutes } from "./modules/contacts/routes";
 import { followUpRoutes } from "./modules/followups/routes";
 import { prepRoutes } from "./modules/prep/routes";
@@ -21,6 +21,10 @@ export function createApp() {
   const dev = Router();
   handle(dev, api.seedDemo, async ({ userId }) => {
     await seedDemo(userId);
+    return { ok: true as const };
+  });
+  handle(dev, api.resetUser, async ({ userId, body }) => {
+    await resetUser(userId, body.keepProfile);
     return { ok: true as const };
   });
 
