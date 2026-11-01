@@ -1,10 +1,11 @@
 // Live mode with a fake mic: checks the phone streams MIC_AUDIO PCM up the socket (no API keys needed).
-// Usage: node scripts/mic-smoke.mjs [baseUrl] [wavFile]   (needs npm run dev)
+// Usage: node scripts/mic-smoke.mjs [baseUrl] [wavFile] [listenSeconds]   (needs npm run dev)
 // With a wav file (16-bit mono) and ELEVENLABS_API_KEY on the server, also waits for a transcript line.
 import { chromium, devices } from "playwright";
 
 const base = process.argv[2] ?? "http://localhost:5173";
 const wav = process.argv[3];
+const listenMs = Number(process.argv[4] ?? 12) * 1000;
 const browser = await chromium.launch({
   channel: "chrome",
   args: [
@@ -30,7 +31,7 @@ await page.getByText("Just show me the demo").click();
 await page.getByText("Sam Chen").click();
 await page.getByText("Talk to Sam").click();
 await page.getByText("🎙").waitFor({ timeout: 5000 });
-await page.waitForTimeout(wav ? 12000 : 2000);
+await page.waitForTimeout(wav ? listenMs : 2000);
 
 const bytesPerSec = 16000 * 2;
 console.log(`mic audio sent: ${audioBytes} bytes (~${(audioBytes / bytesPerSec).toFixed(1)}s of 16kHz PCM)`);

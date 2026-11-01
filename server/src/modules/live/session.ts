@@ -1,6 +1,6 @@
 // Chunk 1 · One live conversation. Owns the transcript and fans events out to LiveListeners.
 // Features plug in as listeners (src/listeners.ts) instead of editing this file, so chunks don't collide.
-import type { ClientMsg, Conversation, Link, Person, Profile, ServerMsg, Speaker, Utterance } from "@larp/shared";
+import type { ClientMsg, Conversation, Hint, Link, Person, Profile, ServerMsg, Speaker, Utterance } from "@larp/shared";
 import { db, newId } from "../../lib/db";
 import { openStt, type SttStream } from "./stt";
 import { synthesize } from "./tts";
@@ -146,6 +146,7 @@ export class LiveSession implements LiveContext {
   }
 
   private async commit(text: string, speaker: Speaker): Promise<void> {
+    if (speaker === "unknown" && isEchoOfHint(text, this.conversation.hints)) return; // the mic heard the coach
     const u: Utterance = { speaker, text, at: Date.now() };
     this.conversation.transcript.push(u);
     this.send({ type: "transcript", speaker, text, final: true });
@@ -169,4 +170,18 @@ export class LiveSession implements LiveContext {
       }),
     );
   }
+}
+
+const ECHO_WINDOW_MS = 8000;
+const words = (s: string) => s.toLowerCase().match(/[a-z0-9']+/g) ?? [];
+
+/** On a speaker (not earbuds) the mic picks up the whisper; such lines are mostly a recent hint's words. */
+export function isEchoOfHint(text: string, hints: Hint[], now = Date.now()): boolean {
+  const said = words(text);
+  if (said.length === 0) return false;
+  return hints.some((h) => {
+    if (now - h.at > ECHO_WINDOW_MS) return false;
+    const hinted = new Set(words(h.text));
+    return said.filter((w) => hinted.has(w)).length / said.length >= 0.6;
+  });
 }

@@ -63,8 +63,8 @@ export function useLive(personId?: string) {
     try {
       const socket = ws.current;
       const stop = await startMic((pcm) => {
-        // Don't stream the coach's own voice back into the transcript.
-        if (player.current?.speaking || socket?.readyState !== WebSocket.OPEN) return;
+        // Always stream, even mid-whisper: they may keep talking. The server drops echoes of the coach.
+        if (socket?.readyState !== WebSocket.OPEN) return;
         socket.send(pcm);
       });
       if (ws.current !== socket || socket?.readyState !== WebSocket.OPEN) return stop(); // page left while asking

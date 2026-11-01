@@ -33,7 +33,7 @@ export const hintsListener: LiveListener = {
 
     if (!llmAvailable) return stubHint(ctx, u);
     if (u.speaker === "me") return; // you don't need a hint for what you just said
-    const reply = parseReply(await ask(ctx, turnPrompt(ctx.conversation.transcript)));
+    const reply = parseReply(await ask(ctx, turnPrompt(ctx.conversation.transcript, ctx.conversation.hints)));
     if (u.speaker === "unknown" && reply.speaker) ctx.setSpeaker(u, reply.speaker);
     if (reply.hint && st.seq === seq) await whisper(ctx, st, reply.hint);
   },
@@ -47,7 +47,7 @@ async function stallHint(ctx: LiveContext, seq: number): Promise<void> {
   if (st.seq !== seq || ctx.conversation.endedAt) return;
   try {
     const hint = llmAvailable
-      ? parseReply(await ask(ctx, stallPrompt(ctx.conversation.transcript))).hint
+      ? parseReply(await ask(ctx, stallPrompt(ctx.conversation.transcript, ctx.conversation.hints))).hint
       : stubOpener(ctx);
     if (hint && st.seq === seq) await whisper(ctx, st, hint);
   } catch (e) {

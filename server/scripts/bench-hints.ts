@@ -25,7 +25,7 @@ for (const model of models) {
     let first = 0;
     let text = "";
     try {
-      for await (const d of streamText({ model: "fast", system: buildSystem(ctx), prompt: turnPrompt(transcript), maxTokens: 40 })) {
+      for await (const d of streamText({ model: "fast", system: buildSystem(ctx), prompt: turnPrompt(transcript, []), maxTokens: 40 })) {
         first ||= Date.now() - t0;
         text += d;
       }

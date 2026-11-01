@@ -45,11 +45,6 @@ export class WhisperPlayer {
   private sources: AudioBufferSourceNode[] = [];
   private endsAt = 0;
 
-  /** True while a whisper is audible, so the mic can ignore it instead of transcribing the coach. */
-  get speaking(): boolean {
-    return this.ctx.currentTime < this.endsAt + 0.3;
-  }
-
   play(chunk: ArrayBuffer): void {
     void this.ctx.resume();
     const pcm = new Int16Array(chunk);

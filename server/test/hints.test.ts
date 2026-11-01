@@ -4,7 +4,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import { seedDemo } from "../src/lib/seed";
 import { parseReply } from "../src/modules/live/hintPrompt";
 import { hintsListener } from "../src/modules/live/hints";
-import { LiveSession } from "../src/modules/live/session";
+import { isEchoOfHint, LiveSession } from "../src/modules/live/session";
 
 const llm = vi.hoisted(() => ({ replies: [] as { text: string; delayMs: number }[] }));
 vi.mock("../src/lib/llm", () => ({
@@ -59,4 +59,11 @@ test("parseReply tolerates model noise", () => {
     speaker: undefined,
     hint: "Ask what got them into robotics",
   });
+});
+
+test("mic lines that echo a recent whisper are dropped, real speech is kept", () => {
+  const hints = [{ id: "h", text: "Mention your Larp Coach demo", at: 1000 }];
+  expect(isEchoOfHint("mention your Larp coach demo.", hints, 3000)).toBe(true);
+  expect(isEchoOfHint("Do you have a demo I can see?", hints, 3000)).toBe(false);
+  expect(isEchoOfHint("mention your Larp coach demo", hints, 20000)).toBe(false); // too long ago
 });
