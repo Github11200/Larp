@@ -2,6 +2,7 @@
 import { ServerMsg, type ClientMsg, type Link, type Speaker } from "@larp/shared";
 import { useEffect, useRef, useState } from "react";
 import { liveUrl } from "../../lib/api";
+import { startMic, WhisperPlayer } from "./audio";
 
 export interface Line {
   speaker: Speaker;
@@ -16,22 +17,27 @@ export function useLive(personId?: string) {
   const [hint, setHint] = useState<string>();
   const [card, setCard] = useState<Link>();
   const [person, setPerson] = useState<string>();
+  const [mic, setMic] = useState<"off" | "on" | "blocked">("off");
+  const player = useRef<WhisperPlayer>(null);
+  const stopMic = useRef<() => void>(null);
 
   useEffect(() => {
     const socket = new WebSocket(liveUrl());
     socket.binaryType = "arraybuffer";
     ws.current = socket;
+    player.current = new WhisperPlayer();
     socket.onopen = () => send({ type: "start", personId });
     socket.onmessage = (e) => {
-      // TODO(chunk 1): binary frames are whisper audio (WHISPER_AUDIO); queue them into an AudioContext.
-      if (typeof e.data !== "string") return;
+      if (typeof e.data !== "string") return player.current?.play(e.data);
       const msg = ServerMsg.parse(JSON.parse(e.data));
       switch (msg.type) {
         case "ready":
-          return setStatus("live");
+          setStatus("live");
+          return void turnOnMic();
         case "transcript":
           return setLines((ls) => upsertLine(ls, msg));
         case "hint":
+          player.current?.cut(); // newest hint wins
           return setHint(msg.text);
         case "link_card":
           return setCard(msg.link);
@@ -43,10 +49,32 @@ export function useLive(personId?: string) {
           return console.warn("[live]", msg.message);
       }
     };
-    return () => socket.close();
+    return () => {
+      socket.close();
+      stopMic.current?.();
+      stopMic.current = null;
+      player.current?.close();
+    };
   }, [personId]);
 
-  // TODO(chunk 1): mic capture -> MIC_AUDIO PCM -> ws.current.send(binary).
+  /** Needs a user gesture on some browsers; if auto-start is refused, the page shows a mic button. */
+  async function turnOnMic() {
+    if (stopMic.current) return;
+    try {
+      const socket = ws.current;
+      const stop = await startMic((pcm) => {
+        // Don't stream the coach's own voice back into the transcript.
+        if (player.current?.speaking || socket?.readyState !== WebSocket.OPEN) return;
+        socket.send(pcm);
+      });
+      if (ws.current !== socket || socket?.readyState !== WebSocket.OPEN) return stop(); // page left while asking
+      stopMic.current = stop;
+      setMic("on");
+    } catch (e) {
+      console.warn("[live] mic", e);
+      setMic("blocked");
+    }
+  }
 
   function send(msg: ClientMsg) {
     if (ws.current?.readyState === WebSocket.OPEN) ws.current.send(JSON.stringify(msg));
@@ -58,6 +86,8 @@ export function useLive(personId?: string) {
     hint,
     card,
     person,
+    mic,
+    turnOnMic,
     dismissCard: () => setCard(undefined),
     say: (speaker: Speaker, text: string) => send({ type: "say", speaker, text }),
     stop: () => send({ type: "stop" }),

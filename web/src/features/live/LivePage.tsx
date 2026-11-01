@@ -23,11 +23,18 @@ export function LivePage() {
         </Link>
         <span className="text-sm text-muted">
           {live.status === "live" ? `● live${live.person ? ` with ${live.person}` : ""}` : live.status}
+          {live.mic === "on" && " · 🎙"}
         </span>
         <button onClick={end} className="text-danger">
           End
         </button>
       </header>
+
+      {live.status === "live" && live.mic !== "on" && (
+        <button onClick={live.turnOnMic} className="rounded-2xl bg-accent p-4 text-lg font-semibold text-bg">
+          {live.mic === "blocked" ? "Mic blocked. Tap to retry" : "Tap to turn on mic"}
+        </button>
+      )}
 
       <div className="rounded-2xl bg-surface p-5 text-2xl font-semibold text-accent min-h-24">
         {live.hint ?? "Listening…"}
@@ -35,7 +42,7 @@ export function LivePage() {
 
       <ul className="flex-1 space-y-1 overflow-y-auto text-sm">
         {live.lines.map((l, i) => (
-          <li key={i} className={l.speaker === "me" ? "text-right text-fg" : "text-muted"}>
+          <li key={i} className={l.speaker === "me" ? "text-right text-fg" : l.speaker === "unknown" ? "text-center text-muted" : "text-muted"}>
             {l.text}
           </li>
         ))}
