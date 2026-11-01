@@ -8,11 +8,11 @@ type Variant = "primary" | "secondary" | "ghost";
 /** Square bone buttons, straight off the LarpHacks site. */
 export function buttonClass(variant: Variant = "primary", extra = "") {
   const base =
-    "inline-flex min-h-12 items-center justify-center gap-2 px-5 text-[15px] font-semibold transition-[opacity,background-color] duration-150 active:opacity-75 disabled:pointer-events-none disabled:opacity-40";
+    "inline-flex items-center justify-center gap-2 px-5 text-[15px] font-semibold transition-[opacity,background-color] duration-150 active:opacity-75 disabled:pointer-events-none disabled:opacity-40";
   const look = {
-    primary: "bg-accent text-bg",
-    secondary: "border border-line text-fg active:bg-raise",
-    ghost: "min-h-10 px-2 font-normal text-muted underline decoration-line",
+    primary: "min-h-12 bg-accent text-bg disabled:border disabled:border-line disabled:bg-transparent disabled:text-muted disabled:opacity-100",
+    secondary: "min-h-12 border border-line text-fg active:bg-raise",
+    ghost: "min-h-11 px-2 font-normal text-muted underline decoration-line",
   }[variant];
   return `${base} ${look} ${extra}`;
 }
@@ -27,6 +27,21 @@ export function ButtonLink({ variant, className = "", ...props }: ComponentProps
 
 export const fieldClass =
   "w-full border border-line bg-surface px-4 py-3 text-[16px] text-fg placeholder:text-muted focus:border-fg focus:outline-none";
+
+/** Label above a form control. */
+export function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="block space-y-2">
+      <span className="block text-[13px] font-semibold text-muted">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+/** A line to say out loud, in Garamond italic: the app's signature voice for coached lines. */
+export function Quote({ children }: { children: ReactNode }) {
+  return <q className="block -indent-[0.4em] font-serif text-[1.5rem] leading-[1.2] italic text-pretty">{children}</q>;
+}
 
 /** Serif page title with an optional plain-language line under it. */
 export function Title({ children, sub }: { children: ReactNode; sub?: ReactNode }) {

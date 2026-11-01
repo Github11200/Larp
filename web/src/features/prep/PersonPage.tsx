@@ -2,7 +2,7 @@
 import { api, type Person } from "@larp/shared";
 import { ArrowUpRight, Mic } from "lucide-react";
 import { useParams } from "react-router";
-import { ActionBar, Avatar, BackLink, Button, ButtonLink, Notice, Pending, SectionLabel, firstName } from "../../components/ui";
+import { ActionBar, Avatar, BackLink, Button, ButtonLink, Notice, Pending, Quote, SectionLabel, firstName } from "../../components/ui";
 import { call } from "../../lib/api";
 import { useApi } from "../../lib/useApi";
 import { paths } from "../../routes";
@@ -68,8 +68,8 @@ function DossierBody({ dossier: d }: { dossier: NonNullable<Person["dossier"]> }
           <SectionLabel>Say this</SectionLabel>
           <ul className="space-y-4 border-l border-line pl-5">
             {d.openers.map((o) => (
-              <li key={o} className="-indent-[0.4em] font-serif text-[1.5rem] leading-[1.2] italic text-pretty">
-                “{o}”
+              <li key={o}>
+                <Quote>{o}</Quote>
               </li>
             ))}
           </ul>

@@ -1,6 +1,8 @@
 // Chunk 3 · Who you are: feed it a resume + links, then fix anything it got wrong, all on one screen.
 import { api, type Profile } from "@larp/shared";
+import { ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Notice, Pending, Title } from "../../components/ui";
 import { call } from "../../lib/api";
 import { useApi } from "../../lib/useApi";
 import { BuildForm } from "./BuildForm";
@@ -21,24 +23,27 @@ export function ProfilePage() {
 
   if (!hasContent || !p) {
     return (
-      <div className="space-y-6">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-bold">Who are you?</h1>
-          <p className="text-muted">Feed me your resume and links. I'll make you sound like you did your homework.</p>
-        </div>
-        {p?.status === "error" && <p className="text-danger">That flopped. Try again?</p>}
+      <div className="space-y-8">
+        <Title sub="Feed me your resume and links. I'll make you sound like you did your homework.">Who are you?</Title>
+        {p?.status === "error" && <Notice>That flopped. Try again?</Notice>}
         <BuildForm cta="Learn me" onStarted={() => void profile.reload()} />
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-      {p.status === "error" && <p className="text-danger">Rebuild flopped. Your old profile is still here.</p>}
+    <div className="space-y-10">
+      {p.status === "error" && <Notice>Rebuild flopped. Your old profile is still here.</Notice>}
       <ProfileCard profile={p} onSave={save} />
-      <details className="rounded-lg border border-white/10 p-3">
-        <summary className="cursor-pointer text-sm text-muted">Add more about you</summary>
-        <div className="pt-3">
+      <details className="group border-t border-line">
+        <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 py-3 [&::-webkit-details-marker]:hidden">
+          <span>
+            <span className="block text-[16px] font-semibold">Add more about you</span>
+            <span className="block text-[14px] text-muted">New resume, more links. It relearns you from scratch.</span>
+          </span>
+          <ChevronDown size={20} strokeWidth={1.75} aria-hidden className="shrink-0 text-muted transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="pt-3 pb-2">
           <BuildForm cta="Learn me again" onStarted={() => void profile.reload()} />
         </div>
       </details>
@@ -61,9 +66,11 @@ function Learning() {
     return () => clearInterval(t);
   }, []);
   return (
-    <div className="flex min-h-[60dvh] flex-col items-center justify-center gap-4 text-center">
-      <div className="size-10 animate-spin rounded-full border-4 border-accent border-t-transparent" />
-      <p className="text-lg text-accent">{LINES[i]}</p>
+    <div className="flex min-h-[60dvh] flex-col items-center justify-center gap-6 text-center">
+      <Pending>Learning you</Pending>
+      <p key={i} aria-hidden className="max-w-[18ch] animate-hand-in font-serif text-[2rem] leading-[1.1] text-balance">
+        {LINES[i]}
+      </p>
     </div>
   );
 }

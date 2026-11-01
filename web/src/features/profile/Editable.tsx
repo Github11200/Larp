@@ -1,25 +1,49 @@
 // Tap-to-edit text. Saves on blur or Enter, Escape cancels.
-import { useState } from "react";
+import { Pencil } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { fieldClass } from "../../components/ui";
 
 export function Editable({
   value,
   onSave,
   placeholder,
+  label,
   className = "",
+  editClassName = "",
   multiline = false,
+  display,
 }: {
   value: string;
   onSave: (v: string) => void;
   placeholder: string;
+  /** Spoken name of the field ("Edit headline"). */
+  label: string;
+  /** Typography when reading. */
   className?: string;
+  /** Extra classes on the edit field (it uses the standard field look). */
+  editClassName?: string;
   multiline?: boolean;
+  /** Custom read view (e.g. skill chips); falls back to the plain value. */
+  display?: ReactNode;
 }) {
   const [draft, setDraft] = useState<string>();
 
   if (draft === undefined) {
     return (
-      <button type="button" className={`block w-full text-left ${className} ${value ? "" : "text-muted italic"}`} onClick={() => setDraft(value)}>
-        {value || placeholder}
+      <button
+        type="button"
+        aria-label={`Edit ${label}: ${value || "empty"}`}
+        className={`group flex min-h-11 w-full gap-3 py-1.5 text-left ${multiline ? "items-start" : "items-center"}`}
+        onClick={() => setDraft(value)}
+      >
+        <span className={`min-w-0 flex-1 ${className} ${value ? "" : "text-muted"}`}>{value ? (display ?? value) : placeholder}</span>
+        {/* Quiet hint that every field is tappable; brightens on hover/focus. */}
+        <Pencil
+          size={14}
+          strokeWidth={1.75}
+          aria-hidden
+          className={`shrink-0 text-muted ${multiline ? "mt-1" : ""} opacity-50 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100`}
+        />
       </button>
     );
   }
@@ -32,7 +56,8 @@ export function Editable({
     autoFocus: true,
     value: draft,
     placeholder,
-    className: `w-full rounded bg-surface px-2 py-1 outline outline-accent/60 ${className}`,
+    "aria-label": label,
+    className: `${fieldClass} my-0.5 ${editClassName}`,
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setDraft(e.target.value),
     onBlur: commit,
     onKeyDown: (e: React.KeyboardEvent) => {
@@ -40,5 +65,5 @@ export function Editable({
       if (e.key === "Escape") setDraft(undefined);
     },
   };
-  return multiline ? <textarea rows={3} {...props} /> : <input {...props} />;
+  return multiline ? <textarea rows={4} {...props} /> : <input {...props} />;
 }

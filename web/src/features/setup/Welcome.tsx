@@ -2,7 +2,7 @@
 import { api } from "@larp/shared";
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Button, ButtonLink } from "../../components/ui";
+import { Button, ButtonLink, Quote } from "../../components/ui";
 import { call } from "../../lib/api";
 import { paths } from "../../routes";
 
@@ -31,7 +31,7 @@ export function Welcome() {
             <span className="size-1.5 animate-breathe rounded-full bg-live" aria-hidden />
             in your ear, right now
           </figcaption>
-          <blockquote className="font-serif text-[1.6rem] leading-[1.15] italic">“Ask Sam how VoiceKit handles barge-in.”</blockquote>
+          <Quote>Ask Sam how VoiceKit handles barge-in.</Quote>
         </figure>
 
         <p className="text-[16px] leading-relaxed text-muted text-pretty">

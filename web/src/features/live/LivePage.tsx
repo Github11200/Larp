@@ -1,6 +1,6 @@
 // Chunk 1 · Live mode: the screen you hold during a conversation. Glanceable: the hint is the screen.
 import { api, type Person } from "@larp/shared";
-import { Keyboard, Mic, X } from "lucide-react";
+import { Keyboard, Mic, MicOff, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { Button, fieldClass, firstName, Notice } from "../../components/ui";
@@ -21,6 +21,7 @@ export function LivePage() {
   };
 
   const listening = live.status === "live" && live.mic === "on";
+  const micOff = live.status === "live" && live.mic !== "on";
 
   return (
     <div className="pt-safe pb-safe mx-auto flex h-dvh max-w-md flex-col px-5">
@@ -28,7 +29,14 @@ export function LivePage() {
         <Link to={paths.home()} aria-label="Leave live mode" className="-ml-2 grid size-11 place-items-center text-muted">
           <X size={22} strokeWidth={1.75} />
         </Link>
-        <Status status={live.status} listening={listening} />
+        {micOff ? (
+          <button type="button" onClick={live.turnOnMic} className="flex min-h-11 items-center gap-2 px-2 text-[14px] font-medium text-muted underline decoration-line underline-offset-4">
+            <MicOff size={16} strokeWidth={1.75} aria-hidden />
+            Mic off, tap to start
+          </button>
+        ) : (
+          <Status status={live.status} listening={listening} />
+        )}
         <Button variant="secondary" className="min-h-10 px-4" onClick={end}>
           End
         </Button>
@@ -39,7 +47,8 @@ export function LivePage() {
       </p>
 
       <main className="flex min-h-0 flex-1 flex-col justify-center gap-8 py-6">
-        {live.status === "live" && live.mic !== "on" ? <StartMic blocked={live.mic === "blocked"} onStart={live.turnOnMic} /> : <Hint text={live.hint} />}
+        {/* A hint always wins; the mic prompt only fills an otherwise empty screen. */}
+        {micOff && !live.hint ? <StartMic blocked={live.mic === "blocked"} onStart={live.turnOnMic} /> : <Hint text={live.hint} />}
         <Transcript lines={live.lines} />
       </main>
 
@@ -66,7 +75,7 @@ export function LivePage() {
 
 function Status({ status, listening }: { status: "connecting" | "live" | "ended"; listening: boolean }) {
   const elapsed = useElapsed(listening);
-  const label = status === "connecting" ? "Connecting…" : status === "ended" ? "Ended" : listening ? "Listening" : "Mic off";
+  const label = status === "connecting" ? "Connecting…" : status === "ended" ? "Ended" : "Listening";
   return (
     <span role="status" className="flex items-center gap-2 text-[14px] font-medium">
       <span className={`size-2 rounded-full ${listening ? "animate-breathe bg-live" : "bg-muted"}`} aria-hidden />

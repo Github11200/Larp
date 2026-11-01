@@ -1,9 +1,9 @@
 // Chunk 4 · Home: add an event, see who's worth meeting.
 import { api, type Event, type Person } from "@larp/shared";
 import { FileCheck2, Plus } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { Link } from "react-router";
-import { Avatar, Button, FilePick, Notice, Pending, Title, fieldClass } from "../../components/ui";
+import { Avatar, Button, Field, FilePick, Notice, Pending, Title, fieldClass } from "../../components/ui";
 import { call } from "../../lib/api";
 import { useApi } from "../../lib/useApi";
 import { paths } from "../../routes";
@@ -117,15 +117,6 @@ function AddEvent({ onAdded }: { onAdded: () => void }) {
         </Button>
       </div>
     </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="block space-y-2">
-      <span className="block text-[13px] font-semibold text-muted">{label}</span>
-      {children}
-    </label>
   );
 }
 
