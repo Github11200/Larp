@@ -114,6 +114,51 @@ export class LiveAudio {
     this.endsAt = 0;
   }
 
+  /**
+   * Escape call ringtone, loud as the page allows (the web can't raise system volume).
+   * Uses the context the Start tap unlocked, so it rings even when a spoken phrase triggers it. Returns stop.
+   */
+  ring(): () => void {
+    const ctx = this.ctx ?? this.unlock();
+    const out = ctx.createGain();
+    out.connect(ctx.destination);
+    // A bright two-note trill, twice, then a pause: reads as "phone ringing" without copying a real ringtone.
+    const burst = () => {
+      const t0 = ctx.currentTime + 0.02;
+      for (let i = 0; i < 12; i++) {
+        const osc = ctx.createOscillator();
+        const env = ctx.createGain();
+        osc.type = "square";
+        osc.frequency.value = i % 2 ? 1320 : 1760;
+        const at = t0 + i * 0.08 + (i >= 6 ? 0.25 : 0);
+        env.gain.setValueAtTime(0.5, at);
+        env.gain.exponentialRampToValueAtTime(0.01, at + 0.075);
+        osc.connect(env).connect(out);
+        osc.start(at);
+        osc.stop(at + 0.08);
+      }
+    };
+    burst();
+    const timer = setInterval(burst, 2500);
+    navigator.vibrate?.([800, 400, 800, 400, 800]);
+    return () => {
+      clearInterval(timer);
+      navigator.vibrate?.(0);
+      out.disconnect();
+    };
+  }
+
+  /** Plays a whole clip (the fake caller's voice) through the unlocked context. Returns stop. */
+  async playClip(url: string): Promise<() => void> {
+    const ctx = this.ctx ?? this.unlock();
+    const buffer = await ctx.decodeAudioData(await (await fetch(url)).arrayBuffer());
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(ctx.destination);
+    src.start();
+    return () => src.stop();
+  }
+
   close(): void {
     this.stopMic?.();
     this.stopMic = undefined;

@@ -2,7 +2,7 @@
 // Covers 1:1 with someone prepped, a stranger, or a whole circle: tap everyone who's there,
 // or just talk and the coach catches names as they're said.
 import { api, type Participant, type Person } from "@larp/shared";
-import { Check, MessageCircleQuestion, Mic, Plus } from "lucide-react";
+import { Check, MessageCircleQuestion, Mic, Phone, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Button, fieldClass, firstName, Notice, Quote } from "../../components/ui";
@@ -10,6 +10,7 @@ import { useApi } from "../../lib/useApi";
 import { paths } from "../../routes";
 import { metIds } from "../event/journey";
 import { LinkCard } from "../linkcards/LinkCard";
+import { EscapeCall, useEscapePhrase } from "./EscapeCall";
 import { useLive, type Line, type LiveStatus, type MicState } from "./useLive";
 import { useHeadsetNudge } from "./useHeadsetNudge";
 import { useWakeLock } from "./useWakeLock";
@@ -25,6 +26,9 @@ export function LivePage() {
   useWakeLock(live.status !== "ended" && started);
   const canNudge = live.status !== "ended" && started;
   useHeadsetNudge(canNudge, live.nudge);
+  const [calling, setCalling] = useState(false);
+  const call = (on: boolean) => (live.hold(on), setCalling(on));
+  useEscapePhrase(live.lines, () => call(true));
 
   // Back to the event you're at; the chat you just had shows up there, notes cooking.
   const end = async () => {
@@ -41,9 +45,14 @@ export function LivePage() {
           </p>
           <Status status={live.status} mic={live.mic} noEars={noEars} />
         </div>
-        <Button variant="secondary" className="min-h-10 shrink-0 px-4" onClick={() => void end()}>
-          {live.lines.length ? "End chat" : "Leave"}
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <button type="button" aria-label="Fake a call to get out" onClick={() => call(true)} className="flex size-10 items-center justify-center text-muted">
+            <Phone size={18} strokeWidth={2} aria-hidden />
+          </button>
+          <Button variant="secondary" className="min-h-10 px-4" onClick={() => void end()}>
+            {live.lines.length ? "End chat" : "Leave"}
+          </Button>
+        </div>
       </header>
 
       <Who participants={live.participants} attendees={room.attendees} met={room.met} onAdd={live.add} onRemove={live.remove} />
@@ -66,6 +75,7 @@ export function LivePage() {
       </footer>
 
       {live.card && <LinkCard link={live.card} onClose={live.dismissCard} />}
+      {calling && <EscapeCall audio={live} onDecline={() => call(false)} onHangUp={() => void end()} />}
     </div>
   );
 }

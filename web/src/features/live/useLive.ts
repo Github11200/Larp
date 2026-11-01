@@ -58,6 +58,8 @@ export function useLive(personId?: string, chosenEvent?: string) {
   const [primaryId, setPrimaryId] = useState<string>();
   const [card, setCard] = useState<Link>();
   const [mic, setMic] = useState<MicState>("off");
+  /** On a fake escape call: the coach goes quiet and stops listening, so the caller's voice isn't transcribed. */
+  const held = useRef(false);
 
   useEffect(() => {
     audio.current = new LiveAudio();
@@ -77,7 +79,7 @@ export function useLive(personId?: string, chosenEvent?: string) {
         socket.send(JSON.stringify(start));
       };
       socket.onmessage = (e) => {
-        if (typeof e.data !== "string") return audio.current?.play(e.data);
+        if (typeof e.data !== "string") return held.current ? undefined : audio.current?.play(e.data);
         const parsed = ServerMsg.safeParse(safeJson(e.data));
         if (!parsed.success) return console.warn("[live] unknown message", e.data); // newer server, older page
         onMessage(parsed.data);
@@ -147,7 +149,7 @@ export function useLive(personId?: string, chosenEvent?: string) {
     // Stream to whichever socket is current, so the mic survives reconnects. Mid-whisper too:
     // they may keep talking; the server drops echoes of the coach.
     audio.current
-      ?.start((pcm) => ws.current?.readyState === WebSocket.OPEN && ws.current.send(pcm))
+      ?.start((pcm) => !held.current && ws.current?.readyState === WebSocket.OPEN && ws.current.send(pcm))
       .then(() => setMic("on"))
       .catch((e) => {
         console.warn("[live] mic", e);
@@ -182,6 +184,13 @@ export function useLive(personId?: string, chosenEvent?: string) {
       }),
     /** "They just spoke, tell me what to say." On-screen button, or an earbud button where the browser routes it. */
     nudge: () => send({ type: "nudge" }),
+    /** Pause the coach (mic + whispers) for an escape call; `ring`/`playClip` play its audio. */
+    hold: (on: boolean) => {
+      held.current = on;
+      if (on) audio.current?.cut();
+    },
+    ring: () => audio.current?.ring() ?? (() => {}),
+    playClip: (url: string) => audio.current?.playClip(url) ?? Promise.resolve(() => {}),
   };
 }
 
