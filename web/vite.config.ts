@@ -10,6 +10,8 @@ if (process.env.RENDER && !process.env.VITE_API_URL?.trim()) {
   throw new Error("VITE_API_URL is not set. In Render → larp-web → Environment, set it to larp-api's URL (e.g. https://larp-api.onrender.com).");
 }
 
+const apiProxy = process.env.API_PROXY ?? "http://localhost:3000";
+
 export default defineConfig({
   plugins: [
     react(),
@@ -41,10 +43,11 @@ export default defineConfig({
   ],
   server: {
     host: true, // reachable from your phone on the same wifi
+    // API_PROXY=https://larp-api.onrender.com previews local UI against prod data.
     proxy: {
-      "/api": "http://localhost:3000",
+      "/api": { target: apiProxy, changeOrigin: true },
       // Only the WebSocket goes to the API; a page load of /live is the app's own route.
-      "/live": { target: "ws://localhost:3000", ws: true, bypass: (req) => (req.headers.upgrade ? undefined : "/index.html") },
+      "/live": { target: apiProxy.replace(/^http/, "ws"), ws: true, changeOrigin: true, bypass: (req) => (req.headers.upgrade ? undefined : "/index.html") },
     },
   },
 });
