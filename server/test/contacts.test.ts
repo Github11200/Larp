@@ -57,6 +57,9 @@ test("same person at two events is one contact with both events", async () => {
   const t = await call(u, api.getContact, { params: { id: sam.id } });
   expect(t.events.map((e) => e.id)).toEqual([a.id, b.id]);
   expect(t.people.every((p) => p.contactId === sam.id)).toBe(true);
+  // The bare "sam chen" at event B inherits what event A told us.
+  const samAtB = (await call(u, api.listPeople, { params: { id: b.id } })).find((p) => p.contactId === sam.id);
+  expect(samAtB?.headline).toBe("Founder, VoiceKit");
 });
 
 test("different LinkedIns with the same name stay two contacts", async () => {

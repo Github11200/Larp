@@ -6,7 +6,7 @@ import { findHuman, normName } from "./identity";
 /** Placeholder names from live/follow-ups that aren't anyone in particular. */
 const NOBODY = new Set(["", "unknown", "someone", "them", "stranger", "unknown person", "new person"]);
 
-/** Upsert a contact for each person and stamp person.contactId. Callers save the returned people. */
+/** Upsert a contact for each person, stamp person.contactId, and fill gaps from the contact. Callers save the returned people. */
 export async function linkContacts(userId: string, people: Person[]): Promise<Person[]> {
   const contacts = await db.contacts.list(userId);
   const out: Person[] = [];
@@ -22,7 +22,8 @@ export async function linkContacts(userId: string, people: Person[]): Promise<Pe
       eventIds: union(c.eventIds, [p.eventId]),
     });
     await db.contacts.put(userId, c);
-    out.push({ ...p, contactId: c.id });
+    // A bare name on this list still gets what we learned about them at earlier events.
+    out.push({ ...p, contactId: c.id, headline: p.headline ?? c.headline, photoUrl: p.photoUrl ?? c.photoUrl, links: c.links });
   }
   return out;
 }

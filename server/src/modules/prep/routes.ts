@@ -17,7 +17,8 @@ handle(prepRoutes, api.listEvents, async ({ userId }) => {
 });
 
 handle(prepRoutes, api.createEvent, async ({ userId, body }) => {
-  const event = await db.events.put(userId, { id: newId(), name: defaultName(body.url), url: body.url, status: "pending", createdAt: Date.now() });
+  const taken = new Set((await db.events.list(userId)).map((e) => e.name));
+  const event = await db.events.put(userId, { id: newId(), name: unique(defaultName(body.url), taken), url: body.url, status: "pending", createdAt: Date.now() });
   // A job that never starts must not leave the event pending forever.
   return enqueue("prep.event", { userId, eventId: event.id, guestList: body.guestList, screenshots: body.screenshots }).then(
     () => event,
@@ -64,4 +65,11 @@ handle(prepRoutes, api.requestDossier, async ({ userId, params, body }) => {
 function defaultName(url?: string) {
   if (url) return url.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/$/, "");
   return `Mystery mixer, ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+}
+
+/** Two mixers on the same day stay tellable apart in the switcher. */
+function unique(name: string, taken: Set<string>) {
+  let n = 1;
+  while (taken.has(n === 1 ? name : `${name} #${n}`)) n++;
+  return n === 1 ? name : `${name} #${n}`;
 }

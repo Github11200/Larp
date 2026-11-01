@@ -8,7 +8,7 @@ import { linkContacts } from "../contacts/contacts";
 import { findHuman } from "../contacts/identity";
 import { cached } from "./cache";
 import { neutral, RESPECT } from "./prompts";
-import { rankGuests, type Rank } from "./rank";
+import { rankGuests } from "./rank";
 import { researchPerson } from "./research";
 import { dedupe, parseGuestList, PrepError, readScreenshots, scrapeEvent, type EventPage, type Guest } from "./sources";
 
@@ -31,10 +31,11 @@ export async function prepEvent(input: { userId: string; eventId: string; guestL
     const shots = await readScreenshots(input.screenshots ?? []).catch(degrade("screenshots", [] as Guest[]));
     const guests = dedupe([...page.guests, ...shots, ...parseGuestList(input.guestList)]);
     if (!guests.length) throw new PrepError(unreadable ?? emptyMessage(input, page));
-    const ranks = await rankGuests(guests, await db.profiles.get(userId, "me"), updated).catch(degrade("rank", guests.map(() => ({}))));
-
-    const people = await linkContacts(userId, mergePeople(await peopleAt(userId, eventId), guests, ranks, eventId));
-    for (const p of people) await db.people.put(userId, p);
+    // Link first so people met at earlier events are ranked with what we already know about them.
+    const people = await linkContacts(userId, mergePeople(await peopleAt(userId, eventId), guests, eventId));
+    const fresh = people.slice(0, guests.length);
+    const ranks = await rankGuests(fresh, await db.profiles.get(userId, "me"), updated).catch(degrade("rank", fresh.map(() => ({}))));
+    for (const [i, p] of people.entries()) await db.people.put(userId, { ...p, ...ranks[i] });
     await db.events.update(userId, eventId, (e) => ({ ...e, status: "ready", error: undefined }));
   } catch (e) {
     console.error("[prep.event]", e);
@@ -43,12 +44,13 @@ export async function prepEvent(input: { userId: string; eventId: string; guestL
 }
 
 /** Re-prep (or a job retry) keeps everyone's id and dossier; new names are added, nobody is dropped. */
-function mergePeople(existing: Person[], guests: Guest[], ranks: Rank[], eventId: string): Person[] {
-  const fresh = guests.map((g, i) => {
+/** The first guests.length entries line up with `guests`. */
+function mergePeople(existing: Person[], guests: Guest[], eventId: string): Person[] {
+  const fresh = guests.map((g) => {
     const prev = findHuman(existing, g);
     return {
       ...prev,
-      ...defined({ ...g, ...ranks[i] }),
+      ...defined(g),
       links: [...new Set([...(prev?.links ?? []), ...g.links])],
       id: prev?.id ?? newId(),
       name: prev?.name ?? g.name,
