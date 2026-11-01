@@ -2,7 +2,7 @@
 import type { ServerMsg } from "@larp/shared";
 import { beforeEach, expect, test, vi } from "vitest";
 import { seedDemo } from "../src/lib/seed";
-import { parseReply } from "../src/modules/live/hintPrompt";
+import { nudgePrompt, parseReply } from "../src/modules/live/hintPrompt";
 import { hintsListener } from "../src/modules/live/hints";
 import { isEchoOfHint, LiveSession, repeatsHint } from "../src/modules/live/session";
 
@@ -235,7 +235,7 @@ test("speaking resets the left-out count", async () => {
   expect(llm.prompts.some((p) => p.includes("a way in"))).toBe(false);
 });
 
-test("a volume-button nudge always whispers, even right after a hint and when the coach thinks the user spoke", async () => {
+test("a nudge always whispers, even right after a hint and when the coach thinks the user spoke", async () => {
   llm.replies.push({ text: "them\nWhere do you climb?", delayMs: 0 }, { text: "me\nSquamish, mostly bouldering", delayMs: 0 });
   const { s, hints } = await session();
   await s.handle({ type: "say", speaker: "unknown", text: "I'm into climbing." });
@@ -243,4 +243,36 @@ test("a volume-button nudge always whispers, even right after a hint and when th
   await s.handle({ type: "nudge" });
   await vi.waitFor(() => expect(hints()).toEqual(["Where do you climb?", "Squamish, mostly bouldering"]));
   await s.stop();
+});
+
+test("a nudge assumes only the latest unlabeled line is them; earlier ones may be the user's", async () => {
+  const { s } = await session();
+  const t = s.conversation.transcript;
+  t.push({ speaker: "unknown", text: "I work on earpieces.", at: 1 }, { speaker: "unknown", text: "What's the hard part?", at: 2 });
+  await s.handle({ type: "nudge" });
+  expect(t.map((u) => u.speaker)).toEqual(["unknown", "them"]);
+  await s.stop();
+});
+
+test("nudges within 1.5s of each other are one ask", async () => {
+  llm.replies.push({ text: "them\nFirst answer", delayMs: 0 }, { text: "them\nSecond answer", delayMs: 0 });
+  const { s, hints } = await session();
+  const now = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+  await s.handle({ type: "nudge" });
+  now.mockReturnValue(1_001_000); // 1s later: same ask
+  await s.handle({ type: "nudge" });
+  now.mockReturnValue(1_002_000); // 2s after the first: a new ask
+  await s.handle({ type: "nudge" });
+  now.mockRestore();
+  expect(llm.prompts).toHaveLength(2);
+  expect(hints()).toEqual(["First answer", "Second answer"]);
+  await s.stop();
+});
+
+test("the nudge prompt always answers, stays grounded in the profile, and keeps it short", () => {
+  const p = nudgePrompt([{ speaker: "them", text: "What's your take on RAG?", at: 1 }], []);
+  expect(p).toContain("never -");
+  expect(p).toContain("at most 12 words");
+  expect(p).toMatch(/only facts from the user's profile/i);
+  expect(p).toMatch(/never invent/i);
 });

@@ -65,6 +65,8 @@ export const GRACE_MS = 90_000;
 const RESUME_WINDOW_MS = 10 * 60_000;
 /** Saving never waits longer than this on a slow hint. */
 export const STOP_WAIT_MS = 2000;
+/** Nudges closer together than this are one ask (double taps, a headset firing play then pause). */
+export const NUDGE_GAP_MS = 1500;
 
 const NO_TRANSPORT: Transport = { json() {}, binary() {} };
 /** Conversations in progress, so a reconnecting phone gets the same one back. */
@@ -98,6 +100,7 @@ export class LiveSession implements LiveContext {
   private whisperSeq = 0;
   private lineIds = new WeakMap<Utterance, string>();
   private graceTimer?: NodeJS.Timeout;
+  private lastNudgeAt = 0;
   /** Saves run one after another, so a late mid-chat snapshot can never overwrite the final save. */
   private saving = Promise.resolve();
   /** Names likely said out loud (me, who's here, the event's attendees), most important first. */
@@ -136,11 +139,13 @@ export class LiveSession implements LiveContext {
     this.stt?.write(chunk);
   }
 
-  /** The user pressed the nudge button: recent unknown lines are THEM, and hints should fire. */
+  /** The user asked for help: the latest unlabeled line is THEM (earlier ones may be the user's own), and a hint should fire. */
   private async nudge(): Promise<void> {
-    for (const u of this.conversation.transcript.slice(-3)) {
-      if (u.speaker === "unknown") this.setSpeaker(u, "them");
-    }
+    const now = Date.now();
+    if (now - this.lastNudgeAt < NUDGE_GAP_MS) return;
+    this.lastNudgeAt = now;
+    const latest = [...this.conversation.transcript].reverse().find((u) => u.speaker === "unknown");
+    if (latest) this.setSpeaker(latest, "them");
     await this.fanOut("onNudge", (l) => l.onNudge?.(this));
   }
 

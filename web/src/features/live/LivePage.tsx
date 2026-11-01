@@ -2,7 +2,7 @@
 // Covers 1:1 with someone prepped, a stranger, or a whole circle: tap everyone who's there,
 // or just talk and the coach catches names as they're said.
 import { api, type Participant, type Person } from "@larp/shared";
-import { Check, Mic, Plus } from "lucide-react";
+import { Check, MessageCircleQuestion, Mic, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Button, fieldClass, firstName, Notice, Quote } from "../../components/ui";
@@ -11,7 +11,7 @@ import { paths } from "../../routes";
 import { metIds } from "../event/journey";
 import { LinkCard } from "../linkcards/LinkCard";
 import { useLive, type Line, type LiveStatus, type MicState } from "./useLive";
-import { useVolumeNudge } from "./useVolumeNudge";
+import { useHeadsetNudge } from "./useHeadsetNudge";
 import { useWakeLock } from "./useWakeLock";
 
 export function LivePage() {
@@ -23,7 +23,8 @@ export function LivePage() {
   const started = live.mic === "on" || noEars;
   const room = useRoom(live.eventId, live.conversationId);
   useWakeLock(live.status !== "ended" && started);
-  useVolumeNudge(live.status !== "ended" && started, live.nudge);
+  const canNudge = live.status !== "ended" && started;
+  useHeadsetNudge(canNudge, live.nudge);
 
   // Back to the event you're at; the chat you just had shows up there, notes cooking.
   const end = async () => {
@@ -55,6 +56,7 @@ export function LivePage() {
       </main>
 
       <footer className="space-y-2 border-t border-line pt-2 pb-2">
+        {canNudge && <NudgeButton onNudge={live.nudge} />}
         {(typing || noEars) && <DebugSay onSay={live.say} />}
         {!noEars && (
           <button type="button" aria-pressed={typing} onClick={() => setTyping(!typing)} className="min-h-10 text-meta text-muted underline decoration-line underline-offset-4">
@@ -217,6 +219,30 @@ function StartButton({ mic, resume, onStart }: { mic: MicState; resume: boolean;
       </Button>
       <p className="text-center text-meta text-muted">Earbud in. Phone in hand. Act natural.</p>
     </div>
+  );
+}
+
+/** "They just spoke, help me reply": a hint now, no matter what the coach thought. Thumb-sized, at the bottom. */
+function NudgeButton({ onNudge }: { onNudge: () => void }) {
+  const [asked, setAsked] = useState(false);
+  useEffect(() => {
+    if (!asked) return;
+    const t = setTimeout(() => setAsked(false), 1500); // same gap the server treats as one ask
+    return () => clearTimeout(t);
+  }, [asked]);
+  return (
+    <Button
+      variant="secondary"
+      className="min-h-16 w-full text-[17px]"
+      disabled={asked}
+      onClick={() => {
+        setAsked(true);
+        onNudge();
+      }}
+    >
+      <MessageCircleQuestion size={20} strokeWidth={2} aria-hidden />
+      {asked ? "On it…" : "Help me reply"}
+    </Button>
   );
 }
 
