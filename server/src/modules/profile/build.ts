@@ -23,10 +23,10 @@ export async function buildProfile(input: BuildInput): Promise<void> {
   const urls = [...new Set(typed)];
   try {
     const sources = await readSources(urls);
-    const extracted = await extract({ ...input, urls }, sources);
+    const before = await db.profiles.get(input.userId, "me");
+    const extracted = await extract({ ...input, urls }, sources, before);
     await db.profiles.update(input.userId, "me", (p) => ({
-      ...p,
-      ...extracted,
+      ...mergeProfile(p, extracted),
       // A rebuild never drops or relabels links the user already has; every URL they typed is kept.
       links: mergeLinks(p.links, extracted.links, urls.map(linkFor)),
       status: "ready",
@@ -37,10 +37,10 @@ export async function buildProfile(input: BuildInput): Promise<void> {
   }
 }
 
-async function extract(input: BuildInput, sources: Sources): Promise<Extracted> {
+async function extract(input: BuildInput, sources: Sources, before: Profile | null): Promise<Extracted> {
   if (llmAvailable) {
     try {
-      return await askJson(Extracted, { model: "smart", system: SYSTEM, prompt: prompt(input, sources), maxTokens: 3000 });
+      return await askJson(Extracted, { model: "smart", system: SYSTEM, prompt: prompt(input, sources, before), maxTokens: 3000 });
     } catch (e) {
       console.error("[profile.build] LLM failed, using fallback", e);
     }
@@ -55,10 +55,13 @@ const SYSTEM = `You build a networking profile for someone about to walk into an
 - skills: up to 12, most impressive first.
 - projects: up to 6 most impressive, each with a one-sentence description and its best URL (demo over repo) if known.
 - links: every shareable link (from the list given AND any in the resume). kind is one of demo, github, linkedin, portfolio, website, resume, other. label is short, e.g. "GitHub", "Rally demo".
+If a current profile is given, keep what's still true and add the new information; never drop facts just because the new input doesn't repeat them.
 Return JSON only.`;
 
-function prompt(input: BuildInput, sources: Sources): string {
+function prompt(input: BuildInput, sources: Sources, before: Profile | null): string {
+  const known = before && (before.name || before.skills.length || before.projects.length) ? before : null;
   const parts = [
+    known && `## Their current profile\n${JSON.stringify(Extracted.parse(known))}`,
     input.resumeText && `## Resume\n${input.resumeText.slice(0, 12000)}`,
     input.notes && `## Notes from them\n${input.notes}`,
     input.urls.length && `## Their links\n${input.urls.join("\n")}`,
@@ -79,13 +82,26 @@ function fallback(input: BuildInput, { github }: Sources): Extracted {
   };
 }
 
+/** A rebuild adds to what we know: blank fields never wipe filled ones, lists grow instead of being replaced. */
+export function mergeProfile(p: Profile, next: Extracted): Profile {
+  const text = (a: string, b: string) => (b.trim() ? b : a);
+  return {
+    ...p,
+    name: text(p.name, next.name),
+    headline: text(p.headline, next.headline),
+    summary: text(p.summary, next.summary),
+    skills: uniqueBy([...next.skills, ...p.skills], (s) => s.toLowerCase()),
+    projects: uniqueBy([...next.projects, ...p.projects], (x) => x.name.toLowerCase()),
+  };
+}
+
+function uniqueBy<T>(items: T[], key: (item: T) => string): T[] {
+  const seen = new Set<string>();
+  return items.filter((x) => !seen.has(key(x)) && Boolean(seen.add(key(x))));
+}
+
 function mergeLinks(...lists: Link[][]): Link[] {
-  const byUrl = new Map<string, Link>();
-  for (const link of lists.flat()) {
-    const key = link.url.replace(/\/+$/, "").toLowerCase();
-    if (!byUrl.has(key)) byUrl.set(key, link);
-  }
-  return [...byUrl.values()];
+  return uniqueBy(lists.flat(), (l) => l.url.replace(/\/+$/, "").toLowerCase());
 }
 
 function linkFor(url: string): Link {

@@ -18,6 +18,12 @@ handle(profileRoutes, api.buildProfile, async ({ userId, body }) => {
     ...(existing ?? { id: "me", name: "", headline: "", summary: "", skills: [], projects: [], links: [] }),
     status: "pending",
   });
-  await enqueue("profile.build", { userId, ...body });
-  return pending;
+  try {
+    await enqueue("profile.build", { userId, ...body });
+    return pending;
+  } catch (e) {
+    // Queue down: say so instead of leaving the screen on "Learning you" forever.
+    console.error("[profile.build] enqueue failed", e);
+    return db.profiles.put(userId, { ...pending, status: "error" });
+  }
 });
