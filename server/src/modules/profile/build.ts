@@ -48,7 +48,7 @@ async function extract(input: BuildInput, sources: Sources): Promise<Extracted> 
   return fallback(input, sources);
 }
 
-const SYSTEM = `You build a networking profile for someone about to walk into an event. Use only facts from their resume, links, and notes.
+const SYSTEM = `You build a networking profile for someone about to walk into an event. Use only facts from their resume, links, and notes. Never use gendered pronouns; use their name or "they".
 - name: their full name.
 - headline: who they are in under 10 words, e.g. "CS student building voice AI tools".
 - summary: 2-3 punchy sentences a stranger would find interesting, including hobbies if mentioned.
