@@ -24,7 +24,7 @@ const PROMISE = /\b(?:I(?:'|’)ll|I will|I(?:'|’)m going to|I am going to|let
 const FACT = /\b(?:I(?:'|’)m|I am|I work|I run|I build|we(?:'|’)re|we are|my )\b/i;
 const NAME_INTRO = /\b(?:I(?:'|’)m|my name(?:'|’)s|my name is|this is)\s+([A-Z][a-z]+)\b/g;
 
-/** "Sure, I'll send you the deck." -> "send them the deck" (said to them, so "you" means them). */
+/** "Sure, I'll send you my deck." -> "send them your deck": reads as "You told Sam you'd send them your deck". */
 export function promiseFrom(text: string): string | undefined {
   const m = text.match(PROMISE);
   if (!m) return undefined;
@@ -33,6 +33,8 @@ export function promiseFrom(text: string): string | undefined {
     .replace(/\byours\b/gi, "theirs")
     .replace(/\byour\b/gi, "their")
     .replace(/\byou\b/gi, "them")
+    .replace(/\bmy\b/gi, "your")
+    .replace(/\bme\b/gi, "you")
     .trim();
 }
 
@@ -77,7 +79,7 @@ export function fallbackWriteUp(conv: Conversation, who: Who[], profile: Profile
 
 function fallbackDraft(who: Who, promises: string[], conv: Conversation, profile: Profile | null, event: Event | null): string {
   const lines = [`Hey ${firstName(who.name)}! Great meeting you${event ? ` at ${event.name}` : ""}.`];
-  if (promises.length) lines.push(`Like I said, I'd ${promises[0].replace(/\bthem\b/g, "you").replace(/\btheir\b/g, "your")}: [link]`);
+  if (promises.length) lines.push(`Like I said, I'd ${promises[0].replace(/\byour\b/g, "my").replace(/\bthem\b/g, "you").replace(/\btheir\b/g, "your")}: [link]`);
   const link = conv.linksShared[0];
   if (link) lines.push(`Here's my ${link.label} again: ${link.url}`);
   const common = who.person?.dossier?.commonGround[0];

@@ -35,7 +35,7 @@ async function freshUser() {
 }
 
 test("curly apostrophes and 'let me know' are handled", () => {
-  expect(promiseFrom("Yeah I’ll intro you to my cofounder!")).toBe("intro them to my cofounder");
+  expect(promiseFrom("Yeah I’ll intro you to my cofounder!")).toBe("intro them to your cofounder");
   expect(promiseFrom("I'm going to send your team the repo")).toBe("send their team the repo");
   expect(promiseFrom("let me know if you're around")).toBeUndefined();
 });

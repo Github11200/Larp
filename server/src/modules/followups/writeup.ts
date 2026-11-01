@@ -31,7 +31,7 @@ Return JSON:
 - moments: up to 3 notable moments or tips for next time (a laugh, an ask, a link shared, a callback to use).
 - namesHeard: first names of the other people mentioned as present (not the user), else [].
 - people: exactly one entry per listed participant, same name as given (none listed = []):
-  - myPromises: things I said I'd do for them, short verb phrases calling them "them" ("send them the deck"). Skip ones already in their open promises.
+  - myPromises: things I said I'd do for them, short verb phrases calling them "them" and my stuff "your" ("send them your deck"). Skip ones already in their open promises.
   - theirPromises: things they said they'd do for me, short verb phrases ("intro you to their CTO").
   - learned: up to 3 short facts this person revealed, as plain statements.
   - draft: the follow-up text I'll send when it's due. 2-4 short sentences, casual, sounds like a real person texting, first name only.
