@@ -70,6 +70,8 @@ export const Person = z.object({
   why: z.string().optional(),
   dossierStatus: z.enum(["none", "pending", "ready", "error"]).default("none"),
   dossier: Dossier.optional(),
+  /** The same human across events (contacts layer). */
+  contactId: z.string().optional(),
 });
 export type Person = z.infer<typeof Person>;
 
@@ -92,9 +94,20 @@ export const Hint = z.object({
 });
 export type Hint = z.infer<typeof Hint>;
 
+/** Someone in a conversation. Groups have several; a name caught from speech may not match anyone prepped. */
+export const Participant = z.object({
+  name: z.string(),
+  personId: z.string().optional(),
+  contactId: z.string().optional(),
+});
+export type Participant = z.infer<typeof Participant>;
+
 export const Conversation = z.object({
   id: z.string(),
+  /** Primary person, if known. Groups and unknowns live in `participants`. */
   personId: z.string().optional(),
+  eventId: z.string().optional(),
+  participants: z.array(Participant).default([]),
   startedAt: z.number(),
   endedAt: z.number().optional(),
   transcript: z.array(Utterance),
@@ -109,6 +122,8 @@ export const FollowUp = z.object({
   id: z.string(),
   conversationId: z.string(),
   personId: z.string().optional(),
+  contactId: z.string().optional(),
+  eventId: z.string().optional(),
   personName: z.string(),
   summary: z.string(),
   promises: z.array(z.string()),

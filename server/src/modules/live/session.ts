@@ -38,7 +38,7 @@ export interface Transport {
 export class LiveSession implements LiveContext {
   profile: Profile | null = null;
   person: Person | null = null;
-  conversation: Conversation = { id: newId(), startedAt: Date.now(), transcript: [], hints: [], linksShared: [] };
+  conversation: Conversation = { id: newId(), startedAt: Date.now(), transcript: [], hints: [], linksShared: [], participants: [] };
   private stt: SttStream | null = null;
   private started = false;
   private ended = false;
