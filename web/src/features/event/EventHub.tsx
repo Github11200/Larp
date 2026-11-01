@@ -79,6 +79,8 @@ function EventMenu({ journey: j, onDeleted }: { journey: Journey; onDeleted: () 
     const name = window.prompt("Call this event…", event.name);
     if (name?.trim()) await call(api.updateEvent, { params: { id: event.id }, body: { name } }).then(() => j.reload());
   };
+  // Re-runs prep (scrape + rank); dossiers already written are kept.
+  const rerank = () => call(api.addGuests, { params: { id: event.id }, body: {} }).then(() => j.reload());
   const remove = async () => {
     if (!window.confirm(`Delete "${event.name}" and its guest list? People you've talked to stay in People.`)) return;
     await call(api.deleteEvent, { params: { id: event.id } }).then(onDeleted);
@@ -87,6 +89,7 @@ function EventMenu({ journey: j, onDeleted }: { journey: Journey; onDeleted: () 
     <Menu
       label="Event options"
       items={[
+        { label: "Re-rank the room", onSelect: () => void rerank() },
         { label: "Rename", onSelect: () => void rename() },
         { label: "Delete event", onSelect: () => void remove(), danger: true },
       ]}

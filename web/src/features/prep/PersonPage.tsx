@@ -22,12 +22,11 @@ export function PersonPage() {
           <DossierMenu person={p} build={dossier.build} />
         </div>
         <PersonHeader name={p.name} photoUrl={p.photoUrl} headline={p.headline} />
-        {p.why && <p className="text-body text-pretty">{p.why}</p>}
+        {p.why && <p className="text-title text-pretty">{p.why}</p>}
       </div>
 
       <DossierSection person={p} {...dossier} />
-
-      <Links links={p.links} />
+      {!p.dossier && <Links links={p.links} />}
 
       {p.contactId && (
         <Rows>
