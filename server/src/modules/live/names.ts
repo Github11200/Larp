@@ -11,8 +11,6 @@ const CUE = new RegExp(`${CUE_LEAD}(?=([a-z][a-z'-]*))`, "gi");
 /** Text ending in a cue, i.e. the next word is probably a name. */
 const ENDS_IN_CUE = new RegExp(`${CUE_LEAD}$`, "i");
 const LAST_NAME = /^\s+([A-Z][a-z]+)\b/;
-/** The speaker naming themselves. Said by the user, the name is theirs (often misheard), never someone new. */
-const SELF_CUE = /^(i'?m|i am|my name is|my name's|name's|call me)$/i;
 /** Bare greetings name whoever's addressed, but also catch noise ("hey Siri", "thanks Google"): attendees only. */
 const GREETING_CUE = /^(hey|hi|hello|yo|thanks|thank you)$/i;
 
@@ -39,15 +37,14 @@ export interface CaughtName {
  * Names introduced in a line, matched against attendees. A lowercase word only counts if it matches
  * an attendee (typed lines are often lowercase); otherwise it must look like a name (Capitalized).
  * `ignore` is the user's own name and project names, so "I'm Nonit" or "this is Larp" add nobody.
- * `byMe`: the user said the line, so "I'm X" is them (misheard), not a new person.
  */
-export function catchNames(text: string, attendees: Person[], ignore: string[] = [], { byMe = false } = {}): CaughtName[] {
+export function catchNames(text: string, attendees: Person[], ignore: string[] = []): CaughtName[] {
   const skip = new Set([...NOT_NAMES, ...ignore.flatMap((s) => norm(s).split(" "))]);
   const line = text.replace(/[\u2018\u2019]/g, "'");
   const out: CaughtName[] = [];
   for (const m of line.matchAll(CUE)) {
     const [, cue, first] = m;
-    if (first.length < 2 || skip.has(first.toLowerCase()) || (byMe && SELF_CUE.test(cue))) continue;
+    if (first.length < 2 || skip.has(first.toLowerCase())) continue;
     const after = line.slice(m.index + m[0].length + first.length);
     const last = LAST_NAME.exec(after)?.[1];
     const full = last && !skip.has(last.toLowerCase()) ? `${first} ${last}` : first;
@@ -78,15 +75,16 @@ function sameName(a: string, b: string): boolean {
 
 /**
  * Looser than an attendee match: could one first name be a mishearing of the other ("Junaid" for "Jinay")?
- * Same first letter, and one's consonant sounds start the other's. Used to stop one person becoming two.
+ * Same first letter, consonant sounds that start the same and differ by at most one, spelled within 3 letters.
+ * Short names (Jim, Sam) are skipped: too many real names sound alike. Used to stop one person becoming two.
  */
 export function soundsAlike(a: string, b: string): boolean {
   const [x, y] = [norm(firstOf(a)), norm(firstOf(b))];
   if (sameName(x, y)) return true;
-  if (!x || !y || x[0] !== y[0]) return false;
+  if (x.length < 4 || y.length < 4 || x[0] !== y[0]) return false;
   const [kx, ky] = [soundKey(x), soundKey(y)];
   const [short, long] = kx.length <= ky.length ? [kx, ky] : [ky, kx];
-  return short.length >= 2 && long.startsWith(short);
+  return short.length >= 2 && long.length - short.length <= 1 && long.startsWith(short) && editDistance(x, y) <= 3;
 }
 
 const firstOf = (name: string) => name.trim().split(/\s+/)[0] ?? "";

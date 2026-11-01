@@ -35,13 +35,21 @@ test("judges a line against the user's voice: same pitch is me, other pitch or m
   expect(me.judge({ db: -21, pitchHz: 145 })).toBeUndefined(); // in between: leave it to the transcript
 });
 
-test("loudness leads (prod levels): the user ~-21dB, others -29 to -34dB at the same pitch range; others' voices aren't learned", () => {
+test("loudness leads (prod levels): the user ~-21dB, others -29 to -34dB in the same pitch range", () => {
   const me = new SelfVoice();
   me.learn({ db: -21.5, pitchHz: 164.5 });
   expect(me.judge({ db: -21.7, pitchHz: 149.5 })).toBe("me");
   expect(me.judge({ db: -29.5, pitchHz: 132.8 })).toBe("them");
   expect(me.judge({ db: -33.7, pitchHz: 126 })).toBe("them");
-  expect(me.judge({ db: -22, pitchHz: undefined })).toBe("me"); // too little voicing: loudness alone
-  me.learn({ db: -33.7, pitchHz: 126 }); // refused: clearly someone else
-  expect(me.judge({ db: -29.5, pitchHz: 132.8 })).toBe("them");
+  expect(me.judge({ db: -22, pitchHz: undefined })).toBeUndefined(); // loud but unpitched: could be a close-by partner
+});
+
+test("an early stray sample can't lock the voiceprint; once trusted, others' voices are refused", () => {
+  const me = new SelfVoice();
+  me.learn({ db: -33, pitchHz: 220 }); // someone else's line mistaken for the user's
+  for (let i = 0; i < 4; i++) me.learn({ db: -21, pitchHz: 130 });
+  expect(me.judge({ db: -21, pitchHz: 132 })).toBe("me");
+  expect(me.rejects({ db: -34, pitchHz: 220 })).toBe(true);
+  me.learn({ db: -34, pitchHz: 220 }); // refused
+  expect(me.judge({ db: -21, pitchHz: 132 })).toBe("me");
 });

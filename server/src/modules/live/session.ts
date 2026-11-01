@@ -67,9 +67,6 @@ export const STOP_WAIT_MS = 2000;
 const NO_TRANSPORT: Transport = { json() {}, binary() {} };
 /** Conversations in progress, so a reconnecting phone gets the same one back. */
 const open = new Map<string, LiveSession>();
-/** Each user's voice, learned in one conversation and kept for the next (until the server restarts). */
-const selfVoices = new Map<string, SelfVoice>();
-const selfVoiceOf = (userId: string) => selfVoices.get(userId) ?? selfVoices.set(userId, new SelfVoice()).get(userId)!;
 const key = (userId: string, conversationId: string) => `${userId}\u0000${conversationId}`;
 
 /** The session a socket should talk to: the in-progress one it asks to resume, or a fresh one. */
@@ -88,6 +85,8 @@ export class LiveSession implements LiveContext {
   people: Person[] = [];
   event: Event | null = null;
   conversation: Conversation = { id: newId(), startedAt: Date.now(), transcript: [], hints: [], linksShared: [], participants: [] };
+  /** The user's voice, learned fresh each conversation: loudness depends on where the phone sits this time. */
+  private selfVoice = new SelfVoice();
   private stt: SttStream | null = null;
   private started = false;
   private ended = false;
@@ -347,18 +346,18 @@ export class LiveSession implements LiveContext {
   }
 
   /** Names said out loud join the conversation; a matching attendee brings their dossier. */
-  private async catchNames(text: string, byMe: boolean): Promise<void> {
+  private async catchNames(text: string): Promise<void> {
     const ignore = [this.profile?.name ?? "", ...(this.profile?.projects.map((p) => p.name) ?? [])];
     const attendees = await this.attendees();
-    for (const c of catchNames(text, attendees, ignore, { byMe })) {
-      if (!c.person && this.isKnownVoice(c.name)) continue;
+    for (const c of catchNames(text, attendees, ignore)) {
+      if (!c.person && this.soundsLikeSomeoneHere(c.name)) continue;
       await this.welcome(c.person ?? null, c.name);
     }
     this.learnNames(attendees);
   }
 
   /** A stranger's name that's probably a mishearing of the user's or someone already here: adding it would split one person in two. */
-  private isKnownVoice(name: string): boolean {
+  private soundsLikeSomeoneHere(name: string): boolean {
     const here = [this.profile?.name, ...this.conversation.participants.map((p) => p.name)];
     return here.some((n) => n && soundsAlike(name, n));
   }
@@ -392,9 +391,9 @@ export class LiveSession implements LiveContext {
     const text = this.fixNames(raw);
     const hints = this.conversation.hints;
     if (speaker === "unknown" && isEchoOfHint(text, hints)) return; // the mic heard the coach
-    const self = selfVoiceOf(this.userId);
+    const self = this.selfVoice;
     // Words alone can mislead (they echo the hint's topic), so a voice that's clearly someone else's vetoes it.
-    const sayingHint = speaker === "unknown" && repeatsHint(text, hints) && self.judge(voice) !== "them";
+    const sayingHint = speaker === "unknown" && repeatsHint(text, hints) && !self.rejects(voice);
     const u: Utterance = { speaker: sayingHint ? "me" : speaker, text, at: Date.now(), ...(voice && { voice }) };
     if (sayingHint) self.learn(voice); // certainly the user: learn their voice
     else if (speaker === "unknown") u.speaker = self.judge(voice) ?? "unknown";
@@ -402,7 +401,7 @@ export class LiveSession implements LiveContext {
     this.send({ type: "transcript", speaker: u.speaker, text, final: true, id: this.lineId(u) });
     if (this.started) void this.save(); // snapshot: a server restart mid-chat can resume from here
     try {
-      if (!sayingHint) await this.catchNames(text, u.speaker === "me"); // a misheard "I'm Nonit" in a hint must not add a stranger
+      if (!sayingHint) await this.catchNames(text); // a misheard "I'm Nonit" in a hint must not add a stranger
       await this.refreshPending();
     } catch (e) {
       console.error("[live] names", e); // knowing who's there is a bonus; never lose the line over it
@@ -446,9 +445,10 @@ const words = (s: string) => s.toLowerCase().match(/[a-z0-9']+/g) ?? [];
 const echoWindowMs = (hint: string) => 2500 + 350 * words(hint).length;
 /** How long after a whisper the user might still be saying it. */
 const REPEAT_WINDOW_MS = 30_000;
-/** Lines with fewer distinctive words ("what's your name?") match hints by chance. */
-const REPEAT_MIN_WORDS = 3;
-const REPEAT_OVERLAP = 0.6;
+/** Shorter lines ("what's your name?") match hints by chance. */
+const REPEAT_MIN_WORDS = 4;
+const REPEAT_OVERLAP = 0.5;
+const REPEAT_VERBATIM = 0.8;
 
 /** Share of a line's words that came from the hint. */
 function overlap(said: string[], hint: string): number {
@@ -461,7 +461,7 @@ const FILLER = new Set(
   (
     "i i'm im me my you you're your we our they them it it's a an the and or but so to of on in at for with about " +
     "is are was were be am do does did have has what what's how who where when why that this there yeah yes no oh " +
-    "hey hi um uh like just really so working work doing building build up right now"
+    "hey hi um uh like just really so up right now"
   ).split(" "),
 );
 const contentWords = (s: string) => words(s).filter((w) => !FILLER.has(w));
@@ -475,7 +475,15 @@ export function isEchoOfHint(text: string, hints: Hint[], now = Date.now()): boo
 
 /** The user saying a hint out loud, as they're coached to. Lets the transcript credit them instead of the other person. */
 export function repeatsHint(text: string, hints: Hint[], now = Date.now()): boolean {
-  const said = contentWords(text);
+  const said = words(text);
   if (said.length < REPEAT_MIN_WORDS) return false;
-  return hints.some((h) => now - h.at <= REPEAT_WINDOW_MS && overlap(said, h.text) >= REPEAT_OVERLAP);
+  return hints.some((h) => now - h.at <= REPEAT_WINDOW_MS && saysHint(said, h.text));
+}
+
+/** Mostly the hint's words, and either near-verbatim or sharing its distinctive words, not just "I'm working on". */
+function saysHint(said: string[], hint: string): boolean {
+  const share = overlap(said, hint);
+  if (share >= REPEAT_VERBATIM) return true;
+  const hinted = new Set(contentWords(hint));
+  return share >= REPEAT_OVERLAP && new Set(contentWords(said.join(" ")).filter((w) => hinted.has(w))).size >= 2;
 }

@@ -125,6 +125,13 @@ test("sharing filler words with a hint isn't saying it (prod: the other person's
   expect(repeatsHint("I'm working on robot, robot", hints, 8000)).toBe(false);
 });
 
+test("short real read-backs still count (near-verbatim, or sharing the hint's distinctive words)", () => {
+  const at = (text: string) => [{ id: "h", text, at: 0 }];
+  expect(repeatsHint("What are you working on, Junaid?", at("What are you working on, Jinay?"), 8000)).toBe(true);
+  expect(repeatsHint("So what are you up to right now?", at("So what are you up to right now?"), 8000)).toBe(true);
+  expect(repeatsHint("What robots do you build?", at("What robots do you build, and for who?"), 8000)).toBe(true);
+});
+
 test("saying a hint aloud is credited to you: no hint for it, and no stranger caught from it", async () => {
   llm.replies.push({ text: "them\nHey, I'm Nonit, I build AI tools for doctors. What's your name?", delayMs: 0 });
   const { s, hints } = await session();

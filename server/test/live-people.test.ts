@@ -49,19 +49,21 @@ test("catchNames: intros, friends, greetings; fuzzy attendee match; skips non-na
   expect(names("i'm working on something new")).toEqual([]);
 });
 
-test("catchNames guards: your own 'I'm X' is you; bare greetings only catch attendees", () => {
-  const names = (text: string, byMe = false) => catchNames(text, demoPeople, ["Alex Rivera"], { byMe }).map((c) => c.name);
-  expect(names("Hey, I'm Anand. I build AI tools.", true)).toEqual([]); // misheard self-intro
-  expect(names("I'm Mati", false)).toEqual(["Mati"]);
+test("catchNames: bare greetings only catch attendees; a mixed line still catches the other person's intro", () => {
+  const names = (text: string) => catchNames(text, demoPeople, ["Alex Rivera", "Nonit"]).map((c) => c.name);
   expect(names("Hey Siri, thanks Google")).toEqual([]);
   expect(names("hey priya")).toEqual(["Priya Patel"]);
   expect(names("Nice to meet you, Quinn")).toEqual(["Quinn"]);
+  expect(names("Hey, I'm Nonit. What's your name? I'm Junaid.")).toEqual(["Junaid"]);
 });
 
-test("soundsAlike: a misheard name isn't a new person; different names are", () => {
+test("soundsAlike: a misheard name isn't a new person; real different names are", () => {
   expect(soundsAlike("Junaid", "Jinay")).toBe(true);
   expect(soundsAlike("Jinae", "Jinay")).toBe(true);
-  expect(soundsAlike("Sara", "Sam")).toBe(false);
+  for (const other of ["John", "Jim", "Jamie"]) expect(soundsAlike(other, "Jinay")).toBe(false);
+  expect(soundsAlike("Juan", "Jinay")).toBe(true); // accepted cost: spelled as close as Junaid; tap to add them instead
+  for (const other of ["Sean", "Simon", "Sara"]) expect(soundsAlike(other, "Sam")).toBe(false);
+  expect(soundsAlike("Ryan", "Ron")).toBe(false);
   expect(soundsAlike("Lena", "Mati")).toBe(false);
 });
 

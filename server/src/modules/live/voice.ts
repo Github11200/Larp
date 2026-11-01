@@ -79,14 +79,25 @@ const SAME_DB = 3;
 const QUIETER_DB = 6;
 /** Lines of the user's voice needed before judging others against it. */
 const MIN_SAMPLES = 1;
+/** Until this many, the voiceprint may be off (one stray sample), so it labels but never overrules or refuses. */
+const TRUSTED_SAMPLES = 3;
+/** Recent samples only, so the voiceprint follows the phone as it moves. */
+const MAX_SAMPLES = 8;
 
 /** The user's voice, learned during a conversation from lines known to be theirs. */
 export class SelfVoice {
   private samples: Voice[] = [];
 
-  /** A sample that's clearly someone else's is refused: one bad line would mislabel the rest of the chat. */
+  /** Once trusted, a sample that's clearly someone else's is refused: one bad line would mislabel the rest of the chat. */
   learn(v: Voice | undefined): void {
-    if (v && this.judge(v) !== "them") this.samples.push(v);
+    if (!v || this.rejects(v)) return;
+    this.samples.push(v);
+    if (this.samples.length > MAX_SAMPLES) this.samples.shift();
+  }
+
+  /** Clearly not the user, by a voiceprint built from enough lines to overrule what the words suggest. */
+  rejects(v: Voice | undefined): boolean {
+    return this.samples.length >= TRUSTED_SAMPLES && this.judge(v) === "them";
   }
 
   /** "me" / "them" when the voice clearly matches or doesn't; undefined leaves it to the transcript. */
@@ -98,7 +109,7 @@ export class SelfVoice {
     const drift = hz && v.pitchHz ? Math.abs(v.pitchHz - hz) / hz : undefined;
     if (drift !== undefined && drift > OTHER_PITCH) return "them";
     if (v.db < db - QUIETER_DB) return "them";
-    if (v.db >= db - SAME_DB && (drift === undefined || drift < SAME_PITCH)) return "me";
+    if (drift !== undefined && drift < SAME_PITCH && v.db >= db - SAME_DB) return "me"; // a close-by partner can be as loud: pitch must agree
     return undefined;
   }
 }
