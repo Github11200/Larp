@@ -37,7 +37,7 @@ export async function buildProfile(input: BuildInput): Promise<void> {
   }
 }
 
-async function extract(input: BuildInput, sources: Sources, before: Profile | null): Promise<Extracted> {
+export async function extract(input: BuildInput, sources: Sources, before: Profile | null): Promise<Extracted> {
   if (llmAvailable) {
     try {
       return await askJson(Extracted, { model: "smart", system: SYSTEM, prompt: prompt(input, sources, before), maxTokens: 3000 });

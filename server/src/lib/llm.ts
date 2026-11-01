@@ -65,7 +65,8 @@ export async function askJson<S extends z.ZodType>(schema: S, ask: Ask): Promise
     response_format: { type: "json_schema", json_schema: { name: "result", schema: z.toJSONSchema(schema), strict: false } },
   });
   const body = (await res.json()) as { choices: { message: { content: string } }[] };
-  return schema.parse(JSON.parse(stripFences(body.choices[0].message.content)));
+  // Models often write `null` for an unknown optional field; treat it as absent so one gap doesn't reject the whole answer.
+  return schema.parse(JSON.parse(stripFences(body.choices[0].message.content), (_, v) => (v === null ? undefined : v)));
 }
 
 /** Streamed text, yielded as it arrives. Use on the live path so TTS can start early. */

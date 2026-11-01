@@ -43,7 +43,7 @@ export function BuildForm({ onStarted, cta }: { onStarted: () => void; cta: stri
           onChange={(e) => setNotes(e.target.value)}
         />
       </label>
-      <Button className="w-full" onClick={submit} disabled={!resume && !notes.trim()}>
+      <Button className="w-full" onClick={submit} disabled={status === "reading" || (!resume && !notes.trim())}>
         {cta}
       </Button>
     </div>
