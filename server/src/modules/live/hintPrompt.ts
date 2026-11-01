@@ -89,10 +89,14 @@ const JOIN_IN = [
   "Not a generic 'what are you building'. Still words the user says, at most 14.",
 ].join(" ");
 
-/** Lines said since the user last spoke. In a group, others can talk past you for a while. */
+/**
+ * THEM lines since the user last spoke. In a group, others can talk past you for a while.
+ * 0 until the user has been heard at all: unlabeled lines prove nothing about being left out.
+ */
 export function linesSinceMe(transcript: Utterance[]): number {
   const last = transcript.map((u) => u.speaker).lastIndexOf("me");
-  return transcript.length - 1 - last;
+  if (last < 0) return 0;
+  return transcript.slice(last + 1).filter((u) => u.speaker === "them").length;
 }
 
 /** A question heard before its line finished. Hinted right away so the user isn't left filling dead air. */

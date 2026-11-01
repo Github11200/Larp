@@ -62,13 +62,15 @@ test("an older hint is dropped once a newer line's hint has been spoken", async 
   expect(hints()).toEqual(["fresh hint"]);
 });
 
-test("a question gets its hint even right after another hint", async () => {
+test("a question gets its hint soon after another hint, once that whisper has played", async () => {
   llm.replies.push({ text: "them\nThat sounds fun, where do you climb?", delayMs: 0 }, { text: "them\nYeah, Squamish twice a year", delayMs: 0 });
   const { s, hints } = await session();
   await s.handle({ type: "say", speaker: "unknown", text: "I'm into climbing." });
   await vi.waitFor(() => expect(hints()).toHaveLength(1));
+  vi.useFakeTimers({ now: Date.now() + 5000, toFake: ["Date"] }); // the first whisper has finished playing, cooldown hasn't
   await s.handle({ type: "say", speaker: "unknown", text: "Have you been to Squamish?" });
   await s.stop();
+  vi.useRealTimers();
   expect(hints()).toEqual(["That sounds fun, where do you climb?", "Yeah, Squamish twice a year"]);
 });
 
@@ -93,6 +95,46 @@ test("the coach stays quiet when it judges the user asked the question (prod: it
   await s.stop();
   expect(hints()).toEqual([]);
   expect(s.conversation.transcript[0].speaker).toBe("me");
+});
+
+test("a question doesn't cut off a whisper still playing", async () => {
+  llm.replies.push({ text: "them\nThat sounds fun, where do you climb?", delayMs: 0 }, { text: "them\nYeah, Squamish twice a year", delayMs: 0 });
+  const { s, hints } = await session();
+  await s.handle({ type: "say", speaker: "unknown", text: "I'm into climbing." });
+  await vi.waitFor(() => expect(hints()).toHaveLength(1));
+  await s.handle({ type: "say", speaker: "unknown", text: "Have you been to Squamish?" });
+  await s.stop();
+  expect(hints()).toHaveLength(1);
+});
+
+test("reading a hint aloud doesn't trigger an early answer to its question", async () => {
+  const { s, hints } = await session();
+  s.conversation.hints.push({ id: "h", text: "Nice, what kind of robots do you build?", at: Date.now() - 8000 });
+  hintsListener.onPartial!(s, "Nice, what kind of robots do you build?", "unknown");
+  await new Promise((r) => setTimeout(r, 300));
+  await s.stop();
+  expect(llm.prompts).toHaveLength(0);
+  expect(hints()).toEqual([]);
+});
+
+test("a hint that arrives after the user already spoke is dropped", async () => {
+  llm.replies.push({ text: "them\nSay you love the dental angle", delayMs: 150 });
+  const { s, hints } = await session();
+  const pending = s.handle({ type: "say", speaker: "them", text: "We do voice agents for dentists." });
+  await new Promise((r) => setTimeout(r, 20));
+  await s.handle({ type: "say", speaker: "me", text: "Oh nice, for which clinics?" });
+  await pending;
+  await s.stop();
+  expect(hints()).toEqual([]);
+});
+
+test("1:1 with no lines from the user yet: no 'way in' nudge", async () => {
+  const { s } = await session();
+  for (const text of ["Hey.", "So what brings you here?", "I'm Jinay by the way.", "Are you hacking tonight?"]) {
+    await s.handle({ type: "say", speaker: "them", text });
+  }
+  await s.stop();
+  expect(llm.prompts.some((p) => p.includes("a way in"))).toBe(false);
 });
 
 test("parseReply tolerates model noise", () => {
@@ -149,6 +191,8 @@ test("saying a hint aloud is credited to you: no hint for it, and no stranger ca
 
 test("left out of a group chat: after 3 lines from others, the coach offers a way in, then waits", async () => {
   const { s, hints } = await session();
+  await s.handle({ type: "add_participant", personId: "p-priya" });
+  await s.handle({ type: "say", speaker: "me", text: "Hey all, good to see you." });
   const others = ["So who's going to the afterparty?", "Depends if the DJ is any good", "Last year's was all techno", "Techno at a hackathon is wild"];
   llm.replies.push({ text: "them\n-", delayMs: 0 }, { text: "them\n-", delayMs: 0 }, { text: "them\nAsk what music they'd pick instead", delayMs: 0 });
   for (const [i, text] of others.entries()) {

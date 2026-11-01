@@ -6,14 +6,16 @@
 // When a prepped person turns up mid-chat (name caught or tapped), the coach tells you who they are.
 import type { Person, Speaker, Utterance } from "@larp/shared";
 import { llmAvailable, streamText } from "../../lib/llm";
-import type { LiveContext, LiveListener } from "./session";
+import { isEchoOfHint, repeatsHint, type LiveContext, type LiveListener } from "./session";
 import { buildSystem, linesSinceMe, parseReply, stallPrompt, turnPrompt, unfinishedPrompt } from "./hintPrompt";
 
-const STALL_MS = 7000;
+const STALL_MS = 12_000;
+/** A lull right after a whisper is the user saying it or thinking: no restart hint then. */
+const STALL_AFTER_HINT_MS = 15_000;
 /** Back-to-back whispers talk over each other; this keeps at most one per window. */
 const COOLDOWN_MS = 4000;
 /** A hint later than this is useless anyway, and must not hold up saving the conversation. */
-const LLM_TIMEOUT_MS = 5000;
+const LLM_TIMEOUT_MS = 3000;
 /** Quiet for this many lines while others talk = left out of the chat; offer a way in. */
 const JOIN_AFTER_LINES = 3;
 /** At most one "way in" nudge per window, so the coach doesn't nag while you pick your moment. */
@@ -33,6 +35,8 @@ interface HintState {
   hintedEarly: boolean;
   questionTimer?: NodeJS.Timeout;
   lastHintAt: number;
+  /** How long the last whisper takes to say; even an urgent hint waits it out instead of cutting it off. */
+  lastHintMs: number;
   lastJoinAt: number;
   stallTimer?: NodeJS.Timeout;
   /** Prepped people already introduced (or there from the start), so each gets one "that's X" whisper. */
@@ -52,6 +56,7 @@ const stateOf = (ctx: LiveContext) =>
       questionsSeen: 0,
       hintedEarly: false,
       lastHintAt: 0,
+      lastHintMs: 0,
       lastJoinAt: 0,
       introduced: new Set(ctx.people.map((p) => p.id)),
       stubTurn: 0,
@@ -64,6 +69,9 @@ export const hintsListener: LiveListener = {
     const st = stateOf(ctx);
     clearTimeout(st.stallTimer); // someone is talking, so no stall
     if (speaker === "me" || !llmAvailable) return;
+    // The user reading a hint aloud (hints end in questions) or the mic hearing the whisper: not a question for the user.
+    const hints = ctx.conversation.hints;
+    if (repeatsHint(text, hints) || isEchoOfHint(text, hints)) return;
     st.partial = text;
     const questions = countQuestions(text);
     if (questions <= st.questionsSeen) return;
@@ -93,8 +101,11 @@ export const hintsListener: LiveListener = {
     if (!llmAvailable) return stubHint(ctx, st, u);
     if (u.speaker === "me") return; // you don't need a hint for what you just said
     const joinIn = leftOut(ctx, st);
-    const urgent = !alreadyHinted && countQuestions(u.text) > 0;
-    const reply = await askHint(ctx, st, turnPrompt(ctx.conversation.transcript, ctx.conversation.hints, { joinIn }), urgent);
+    const urgent = countQuestions(u.text) > 0;
+    // Already answered mid-line: this call only settles who spoke, it doesn't whisper a second answer.
+    const { reply } = await askHint(ctx, st, turnPrompt(ctx.conversation.transcript, ctx.conversation.hints, { joinIn }), urgent, {
+      speak: !alreadyHinted,
+    });
     if (u.speaker === "unknown" && reply.speaker) ctx.setSpeaker(u, reply.speaker);
   },
   onEnd(ctx) {
@@ -107,9 +118,11 @@ export const hintsListener: LiveListener = {
 /** A question heard mid-line: hint now rather than after the speaker (and the user's reply) pauses. */
 async function unfinishedHint(ctx: LiveContext, st: HintState): Promise<void> {
   if (!st.partial || ctx.conversation.endedAt) return;
-  st.hintedEarly = true;
   try {
-    await askHint(ctx, st, unfinishedPrompt(ctx.conversation.transcript, ctx.conversation.hints, st.partial), true);
+    const { spoken } = await askHint(ctx, st, unfinishedPrompt(ctx.conversation.transcript, ctx.conversation.hints, st.partial), true, {
+      early: true,
+    });
+    if (spoken) st.hintedEarly = true;
   } catch (e) {
     console.error("[live:hints] question", e); // timer callback: nothing upstream to catch it
   }
@@ -117,20 +130,38 @@ async function unfinishedHint(ctx: LiveContext, st: HintState): Promise<void> {
 
 /**
  * Asks for a hint and whispers it, unless a hint from a newer request already went out. `urgent` (a question) skips the cooldown.
- * When the coach judges the user said the line, it stays quiet: otherwise it answers the user's own questions.
+ * Stays quiet when the coach judges the user said the line (else it answers the user's own questions),
+ * and when the chat moved on while it thought. `early`: asked mid-line, so that line finishing isn't "moving on".
  */
-async function askHint(ctx: LiveContext, st: HintState, prompt: string, urgent: boolean): Promise<ReturnType<typeof parseReply>> {
+async function askHint(
+  ctx: LiveContext,
+  st: HintState,
+  prompt: string,
+  urgent: boolean,
+  { speak = true, early = false } = {},
+): Promise<{ reply: ReturnType<typeof parseReply>; spoken: boolean }> {
   const req = ++st.req;
+  const heard = ctx.conversation.transcript.length;
   const reply = parseReply(await ask(ctx, prompt));
-  if (reply.hint && reply.speaker !== "me" && req > st.spokenReq && claim(st, urgent)) {
-    st.spokenReq = req;
-    await ctx.whisper(reply.hint);
-  }
-  return reply;
+  const ok = speak && reply.hint && reply.speaker !== "me" && req > st.spokenReq && !movedOn(ctx, heard, early);
+  if (!ok || !claim(st, urgent)) return { reply, spoken: false };
+  st.spokenReq = req;
+  st.lastHintMs = whisperMs(reply.hint!);
+  await ctx.whisper(reply.hint!);
+  return { reply, spoken: true };
 }
+
+/** Since the request: the user spoke, or someone said something newer than the line being answered. */
+function movedOn(ctx: LiveContext, heard: number, early: boolean): boolean {
+  const since = ctx.conversation.transcript.slice(heard);
+  return since.some((u) => u.speaker === "me") || since.length > (early ? 1 : 0);
+}
+
+const whisperMs = (text: string) => 2500 + 300 * text.split(/\s+/).length;
 
 /** Claims the nudge window when true, so lines arriving close together can't each ask for one. */
 function leftOut(ctx: LiveContext, st: HintState): boolean {
+  if (ctx.conversation.participants.length < 2) return false; // 1:1: nobody to be left out by
   if (linesSinceMe(ctx.conversation.transcript) < JOIN_AFTER_LINES || Date.now() - st.lastJoinAt < JOIN_EVERY_MS) return false;
   st.lastJoinAt = Date.now();
   return true;
@@ -138,7 +169,7 @@ function leftOut(ctx: LiveContext, st: HintState): boolean {
 
 async function stallHint(ctx: LiveContext, seq: number): Promise<void> {
   const st = stateOf(ctx);
-  if (st.seq !== seq || ctx.conversation.endedAt) return;
+  if (st.seq !== seq || ctx.conversation.endedAt || Date.now() - st.lastHintAt < STALL_AFTER_HINT_MS) return;
   try {
     const hint = llmAvailable
       ? parseReply(await ask(ctx, stallPrompt(ctx.conversation.transcript, ctx.conversation.hints))).hint
@@ -159,12 +190,15 @@ async function ask(ctx: LiveContext, prompt: string): Promise<string> {
 }
 
 async function whisper(ctx: LiveContext, st: HintState, text: string, urgent = false): Promise<void> {
-  if (claim(st, urgent)) await ctx.whisper(text);
+  if (!claim(st, urgent)) return;
+  st.lastHintMs = whisperMs(text);
+  await ctx.whisper(text);
 }
 
 /** Takes the whisper slot. `urgent` skips the cooldown: a question to answer, or who just walked up, beats any other hint. */
 function claim(st: HintState, urgent: boolean): boolean {
-  if (!urgent && Date.now() - st.lastHintAt < COOLDOWN_MS) return false;
+  const since = Date.now() - st.lastHintAt;
+  if (since < (urgent ? st.lastHintMs : Math.max(COOLDOWN_MS, st.lastHintMs))) return false;
   st.lastHintAt = Date.now();
   return true;
 }
