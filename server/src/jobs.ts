@@ -6,7 +6,7 @@ import { prepDossier, prepEvent } from "./modules/prep/jobs";
 
 export const jobs = {
   "profile.build": {
-    payload: z.object({ userId: z.string(), resumeText: z.string().optional(), urls: z.array(z.string()) }),
+    payload: z.object({ userId: z.string(), resumeText: z.string().optional(), urls: z.array(z.string()), notes: z.string().optional() }),
     run: buildProfile,
   },
   "prep.event": {

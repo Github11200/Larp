@@ -27,6 +27,8 @@ export type ResOf<D extends RouteDef> = z.output<D["res"]>;
 export const BuildProfileInput = z.object({
   resumeText: z.string().optional(),
   urls: z.array(z.string()).default([]),
+  /** Free-form "anything else about you" text from the user. */
+  notes: z.string().optional(),
 });
 
 export const CreateEventInput = z

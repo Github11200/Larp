@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Run api + web on alternate ports (3100/5273) so a second checkout can run beside `npm run dev`.
+# Runs api :3013 + web :5183 so a second worktree can run alongside the main `npm run dev`.
+set -euo pipefail
 cd "$(dirname "$0")/.."
-PORT=3100 npm run dev -w server &
-VITE_API_URL=http://localhost:3100 npx -w web vite --port 5273 --strictPort &
-wait
+npx concurrently -n api,web \
+  "cd server && PORT=3013 npx tsx --env-file-if-exists=../.env src/server.ts" \
+  "cd web && VITE_API_URL=http://localhost:3013 npx vite --port 5183 --strictPort"

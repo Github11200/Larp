@@ -6,3 +6,5 @@ dist
 .DS_Store
 scripts/.shots
 server/.cache
+web/.impeccable/mocks
+web/.impeccable/decision-payload.json

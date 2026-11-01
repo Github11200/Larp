@@ -8,8 +8,8 @@ export const env = {
   elevenLabsVoiceId: process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",
   /** LLM via Baseten Model APIs (OpenAI-compatible). Unset = features fall back to stubs. */
   basetenKey: process.env.BASETEN_API_KEY || undefined,
-  llmFastModel: process.env.LLM_FAST_MODEL || "moonshotai/Kimi-K2-Instruct-0905",
-  llmSmartModel: process.env.LLM_SMART_MODEL || "deepseek-ai/DeepSeek-V3.1",
+  llmFastModel: process.env.LLM_FAST_MODEL || "zai-org/GLM-5.2-Fast",
+  llmSmartModel: process.env.LLM_SMART_MODEL || "zai-org/GLM-5.3",
   /** Must accept images (guest-list screenshots). */
   llmVisionModel: process.env.LLM_VISION_MODEL || "meta-llama/Llama-4-Maverick-17B-128E-Instruct",
   /** Exa web search for person research (chunk 4). Unset = dossiers use only what the guest list had. */

@@ -17,7 +17,9 @@ const shot = (name) => page.screenshot({ path: `${shots}${name}.png` });
 
 // Fresh user each run so state from earlier runs doesn't leak in.
 await page.goto(`${base}/?user=smoke-${Date.now()}`);
-await page.getByText("Just show me the demo").click();
+// New users land in guided setup; take the demo-crowd shortcut.
+await page.getByText("Skip, use the demo crowd").click();
+await page.getByText("Read the dossiers first").click();
 await page.getByText("Sam Chen").waitFor();
 await shot("1-people");
 
@@ -33,13 +35,13 @@ await input.press("Enter");
 await page.getByText("Larp Coach demo").waitFor();
 await shot("3-linkcard");
 await page.getByText("tap to dismiss").click();
-await page.getByText("Then ask:").waitFor();
+await page.getByTestId("hint").filter({ hasNotText: "Listening…" }).waitFor(); // stub or real LLM hint
 await input.fill("Sure, I'll send you the deck");
 await page.getByRole("button", { name: "me", exact: true }).click();
 await shot("4-live");
 
 await page.getByRole("button", { name: "End", exact: true }).click();
-await page.getByText("You promised:").waitFor();
+await page.getByRole("heading", { name: "You promised" }).waitFor();
 await page.getByText("Skip to a week later").click();
 await shot("5-followups");
 

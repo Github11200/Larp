@@ -65,6 +65,8 @@ async function complete(ask: Ask, defaultTier: ModelTier, stream: boolean, extra
       model: { fast: env.llmFastModel, smart: env.llmSmartModel, vision: env.llmVisionModel }[tier],
       messages,
       max_tokens: ask.maxTokens ?? (tier === "fast" ? 100 : 2000),
+      // These models think before answering by default; the live path can't wait for that.
+      ...(tier === "fast" && { chat_template_kwargs: { enable_thinking: false, thinking: false } }),
       stream,
       ...extra,
     }),
