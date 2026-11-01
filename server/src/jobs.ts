@@ -10,7 +10,7 @@ export const jobs = {
     run: buildProfile,
   },
   "prep.event": {
-    payload: z.object({ userId: z.string(), eventId: z.string(), guestList: z.string().optional() }),
+    payload: z.object({ userId: z.string(), eventId: z.string(), guestList: z.string().optional(), screenshots: z.array(z.string()).optional() }),
     run: prepEvent,
   },
   "prep.dossier": {

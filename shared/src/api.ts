@@ -34,8 +34,10 @@ export const CreateEventInput = z
     url: z.string().optional(),
     /** Pasted guest list, one person per line. Fallback when the event page can't be scraped. */
     guestList: z.string().optional(),
+    /** Guest-list screenshots as image data URLs; a vision model reads the names off them. */
+    screenshots: z.array(z.string()).optional(),
   })
-  .refine((v) => v.url || v.guestList, "url or guestList required");
+  .refine((v) => v.url || v.guestList || v.screenshots?.length, "url, guestList, or screenshots required");
 
 export const Ok = z.object({ ok: z.literal(true) });
 

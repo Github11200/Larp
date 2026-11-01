@@ -11,7 +11,7 @@ handle(prepRoutes, api.listEvents, ({ userId }) => db.events.list(userId));
 
 handle(prepRoutes, api.createEvent, async ({ userId, body }) => {
   const event = await db.events.put(userId, { id: newId(), name: body.url ?? "New event", url: body.url, status: "pending" });
-  await enqueue("prep.event", { userId, eventId: event.id, guestList: body.guestList });
+  await enqueue("prep.event", { userId, eventId: event.id, guestList: body.guestList, screenshots: body.screenshots });
   return event;
 });
 
