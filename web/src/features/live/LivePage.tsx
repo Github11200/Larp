@@ -2,43 +2,48 @@
 // Covers 1:1 with someone prepped, a stranger, or a whole circle: tap everyone who's there,
 // or just talk and the coach catches names as they're said.
 import { api, type Participant, type Person } from "@larp/shared";
-import { Mic, Plus, X } from "lucide-react";
+import { Check, Mic, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Button, fieldClass, firstName, Notice, Quote } from "../../components/ui";
 import { useApi } from "../../lib/useApi";
 import { paths } from "../../routes";
+import { metIds } from "../event/journey";
 import { LinkCard } from "../linkcards/LinkCard";
 import { useLive, type Line, type LiveStatus, type MicState } from "./useLive";
 import { useWakeLock } from "./useWakeLock";
 
 export function LivePage() {
   const [params] = useSearchParams();
-  const live = useLive(params.get("person") ?? undefined);
+  const live = useLive(params.get("person") ?? undefined, params.get("event") ?? undefined);
   const navigate = useNavigate();
   const noEars = live.ears === false;
   const [typing, setTyping] = useState(false);
   const started = live.mic === "on" || noEars;
+  const room = useRoom(live.eventId, live.conversationId);
   useWakeLock(live.status !== "ended" && started);
 
-  const leave = async (to: string) => {
+  // Back to the event you're at; the chat you just had shows up there, notes cooking.
+  const end = async () => {
     await live.stop();
-    navigate(to);
+    navigate(live.eventId ? paths.event(live.eventId, "live") : paths.home());
   };
 
   return (
     <div className="pt-safe pb-safe mx-auto flex h-dvh max-w-md flex-col px-5">
-      <header className="flex items-center justify-between py-2">
-        <button type="button" aria-label="End and leave live mode" onClick={() => leave(paths.home())} className="-ml-2 grid size-11 place-items-center text-muted">
-          <X size={22} strokeWidth={1.75} />
-        </button>
-        <Status status={live.status} mic={live.mic} noEars={noEars} />
-        <Button variant="secondary" className="min-h-10 px-4" onClick={() => leave(paths.followUps(live.conversationId))}>
-          End
+      <header className="flex items-center justify-between gap-4 py-2">
+        <div className="min-w-0 space-y-0.5">
+          <p className="truncate text-meta text-muted" data-testid="live-event">
+            {room.eventName ? `${room.eventName}${room.total ? ` · ${room.met.size} of ${room.total} met` : ""}` : "No event"}
+          </p>
+          <Status status={live.status} mic={live.mic} noEars={noEars} />
+        </div>
+        <Button variant="secondary" className="min-h-10 shrink-0 px-4" onClick={() => void end()}>
+          {live.lines.length ? "End chat" : "Leave"}
         </Button>
       </header>
 
-      <Who participants={live.participants} eventId={live.eventId} onAdd={live.add} onRemove={live.remove} />
+      <Who participants={live.participants} attendees={room.attendees} met={room.met} onAdd={live.add} onRemove={live.remove} />
 
       <main className="flex min-h-0 flex-1 flex-col justify-center gap-8 py-6">
         {live.hint ? <Hint text={live.hint} /> : <SayThis openers={live.openers} listening={live.mic === "on"} />}
@@ -50,7 +55,7 @@ export function LivePage() {
       <footer className="space-y-2 border-t border-line pt-2 pb-2">
         {(typing || noEars) && <DebugSay onSay={live.say} />}
         {!noEars && (
-          <button type="button" aria-pressed={typing} onClick={() => setTyping(!typing)} className="min-h-10 text-[13px] text-muted underline decoration-line underline-offset-4">
+          <button type="button" aria-pressed={typing} onClick={() => setTyping(!typing)} className="min-h-10 text-meta text-muted underline decoration-line underline-offset-4">
             {typing ? "hide typing" : "demo: type a line"}
           </button>
         )}
@@ -59,6 +64,21 @@ export function LivePage() {
       {live.card && <LinkCard link={live.card} onClose={live.dismissCard} />}
     </div>
   );
+}
+
+/** The event around this chat: its name, attendees (prepped first), and who you've already met there. Fetched once, off the live path. */
+function useRoom(eventId?: string, conversationId?: string) {
+  const events = useApi(api.listEvents);
+  const people = useApi(api.listPeople, eventId ? { id: eventId } : undefined); // no event yet: request fails quietly, no chips
+  const convs = useApi(api.listConversations);
+  const earlier = (convs.data ?? []).filter((c) => c.eventId === eventId && c.id !== conversationId);
+  const attendees = eventId ? prepFirst(people.data ?? []) : [];
+  return {
+    eventName: events.data?.find((e) => e.id === eventId)?.name,
+    attendees,
+    total: attendees.length,
+    met: metIds(earlier, []),
+  };
 }
 
 function Status({ status, mic, noEars }: { status: LiveStatus; mic: MicState; noEars: boolean }) {
@@ -77,7 +97,7 @@ function Status({ status, mic, noEars }: { status: LiveStatus; mic: MicState; no
               ? "typing mode"
               : "not listening";
   return (
-    <span role="status" className="flex items-center gap-2 text-[14px] font-semibold tracking-wide">
+    <span role="status" className="flex items-center gap-2 text-meta font-semibold tracking-wide">
       <span
         aria-hidden
         className={`size-2.5 rounded-full ${listening ? "animate-breathe bg-danger" : status === "reconnecting" ? "animate-breathe bg-muted" : "bg-muted"}`}
@@ -88,27 +108,27 @@ function Status({ status, mic, noEars }: { status: LiveStatus; mic: MicState; no
   );
 }
 
-/** Who's in the conversation: tap people from the event (several = a group), or add a stranger by name. */
+/** Who's in the conversation: tap people from the event (several = a group), or add a stranger by name. Met earlier = check. */
 function Who({
   participants,
-  eventId,
+  attendees,
+  met,
   onAdd,
   onRemove,
 }: {
   participants: Participant[];
-  eventId?: string;
+  attendees: Person[];
+  met: Set<string>;
   onAdd: (who: { personId?: string; name?: string }) => void;
   onRemove: (who: { personId?: string; name?: string }) => void;
 }) {
-  const people = useApi(api.listPeople, eventId ? { id: eventId } : undefined); // no event yet: request fails quietly, no chips
-  const attendees = eventId ? prepFirst(people.data ?? []) : [];
   const unprepped = participants.filter((p) => !p.personId);
   const isIn = (id: string) => participants.some((p) => p.personId === id);
   const [naming, setNaming] = useState(false);
 
   return (
     <section className="space-y-2 pt-1" aria-label="Who's here">
-      <p className="text-[15px] text-muted">
+      <p className="text-body text-muted">
         Talking to <span className="text-fg">{talkingTo(participants)}</span>
       </p>
       <ul className="-mx-5 flex gap-2 overflow-x-auto px-5 [scrollbar-width:none]">
@@ -117,6 +137,7 @@ function Who({
             <Chip
               on={isIn(p.id)}
               label={firstName(p.name)}
+              done={met.has(p.id)}
               onClick={() => (isIn(p.id) ? onRemove({ personId: p.id }) : onAdd({ personId: p.id }))}
             />
           </li>
@@ -130,7 +151,7 @@ function Who({
           {naming ? (
             <NameInput onDone={(name) => (setNaming(false), name && onAdd({ name }))} />
           ) : (
-            <button type="button" onClick={() => setNaming(true)} className="flex h-11 items-center gap-1.5 border border-dashed border-line px-4 text-[14px] text-muted">
+            <button type="button" onClick={() => setNaming(true)} className="flex h-11 items-center gap-1.5 border border-dashed border-line px-4 text-body text-muted">
               <Plus size={16} strokeWidth={2} aria-hidden />
               someone new
             </button>
@@ -153,14 +174,15 @@ function talkingTo(ps: Participant[]): string {
   return ps.length === 2 ? names.join(" + ") : `${names.slice(0, 2).join(", ")} + ${ps.length - 2}`;
 }
 
-function Chip({ on, label, onClick }: { on: boolean; label: string; onClick: () => void }) {
+function Chip({ on, label, done, onClick }: { on: boolean; label: string; done?: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
       aria-pressed={on}
       onClick={onClick}
-      className={`h-11 border px-4 text-[14px] font-medium whitespace-nowrap ${on ? "border-fg bg-fg text-bg" : "border-line text-fg"}`}
+      className={`flex h-11 items-center gap-1.5 border px-4 text-body font-medium whitespace-nowrap ${on ? "border-fg bg-fg text-bg" : done ? "border-line text-muted" : "border-line text-fg"}`}
     >
+      {done && <Check size={14} strokeWidth={2.5} aria-label="met earlier" />}
       {label}
     </button>
   );
@@ -191,7 +213,7 @@ function StartButton({ mic, resume, onStart }: { mic: MicState; resume: boolean;
         <Mic size={20} strokeWidth={2} aria-hidden />
         {mic === "starting" ? "Asking for the mic…" : mic === "blocked" ? "Try the mic again" : resume ? "Resume listening" : "Start listening"}
       </Button>
-      <p className="text-center text-[13px] text-muted">Earbud in. Phone in hand. Act natural.</p>
+      <p className="text-center text-meta text-muted">Earbud in. Phone in hand. Act natural.</p>
     </div>
   );
 }
@@ -207,7 +229,7 @@ function SayThis({ openers, listening }: { openers: string[]; listening: boolean
   }
   return (
     <section className="space-y-4" aria-label="Say this">
-      <h2 className="text-[13px] font-semibold text-muted">Say this</h2>
+      <h2 className="text-meta font-semibold text-muted">Say this</h2>
       <ul className="space-y-4">
         {openers.map((o) => (
           <li key={o}>
@@ -233,7 +255,7 @@ function Transcript({ lines }: { lines: Line[] }) {
   const recent = lines.slice(-4);
   if (!recent.length) return null;
   return (
-    <ul className="space-y-1.5 text-[15px] leading-snug" aria-label="What's been said">
+    <ul className="space-y-1.5 text-body" aria-label="What's been said">
       {recent.map((l, i) => (
         <li
           key={l.id ?? `p${lines.length - recent.length + i}`}

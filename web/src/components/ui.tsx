@@ -1,5 +1,5 @@
 // Chunk 6 · The building blocks every screen uses, so the whole app speaks one visual language.
-import { ArrowLeft, Check, CircleAlert, FileUp, ImagePlus } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, CircleAlert, Ellipsis, FileUp, ImagePlus } from "lucide-react";
 import { useState, type ComponentProps, type ReactNode } from "react";
 import { Link } from "react-router";
 
@@ -43,13 +43,122 @@ export function Quote({ children }: { children: ReactNode }) {
   return <q className="block -indent-[0.4em] font-serif text-[1.5rem] leading-[1.2] text-pretty">{children}</q>;
 }
 
-/** Serif page title with an optional plain-language line under it. */
+/** Serif page title with an optional one-line meta under it. Keep `sub` to a few words. */
 export function Title({ children, sub }: { children: ReactNode; sub?: ReactNode }) {
   return (
-    <header className="space-y-2">
-      <h1 className="font-serif text-[2.5rem] leading-[1.05] tracking-[-0.01em] text-balance">{children}</h1>
-      {sub && <p className="text-[15px] leading-snug text-muted text-pretty">{sub}</p>}
+    <header className="space-y-1.5">
+      <h1 className="text-display text-balance">{children}</h1>
+      {sub && <p className="text-body text-muted text-pretty">{sub}</p>}
     </header>
+  );
+}
+
+type Tone = "plain" | "live" | "done";
+
+/** Tiny status tag on a row: "Dossier", "Met", "Due". One per row. */
+export function Pill({ tone = "plain", children }: { tone?: Tone; children: ReactNode }) {
+  const look = { plain: "border-line text-muted", live: "border-live/60 text-live", done: "border-fg/40 text-fg" }[tone];
+  return <span className={`inline-flex h-6 shrink-0 items-center border px-2 text-meta whitespace-nowrap ${look}`}>{children}</span>;
+}
+
+/** The one list-row shape for people, events and chats: avatar or lead, name, one meta line, a pill. */
+export function Row({
+  to,
+  onClick,
+  lead,
+  title,
+  meta,
+  trail,
+  chevron = true,
+}: {
+  to?: string;
+  onClick?: () => void;
+  lead?: ReactNode;
+  title: ReactNode;
+  meta?: ReactNode;
+  trail?: ReactNode;
+  /** Off when `trail` already says what a tap does. */
+  chevron?: boolean;
+}) {
+  const body = (
+    <>
+      {lead}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-body font-semibold">{title}</span>
+        {meta && <span className="mt-0.5 line-clamp-2 text-meta text-muted">{meta}</span>}
+      </span>
+      {trail}
+      {chevron && (to || onClick) && <ChevronRight size={16} strokeWidth={1.75} className="shrink-0 text-muted" aria-hidden />}
+    </>
+  );
+  const cls = "flex w-full items-center gap-3 py-3 text-left active:bg-raise";
+  if (to) return <Link to={to} className={cls}>{body}</Link>;
+  if (onClick) return <button type="button" onClick={onClick} className={cls}>{body}</button>;
+  return <div className={cls}>{body}</div>;
+}
+
+/** Ruled list wrapper for Rows. */
+export function Rows({ children, label }: { children: ReactNode; label?: string }) {
+  return (
+    <ul aria-label={label} className="divide-y divide-line border-y border-line">
+      {children}
+    </ul>
+  );
+}
+
+/** Quiet "⋯" menu for rare actions (rename, delete, regenerate) so they don't clutter the screen. */
+export function Menu({ items, label = "More" }: { items: { label: string; onSelect: () => void; danger?: boolean }[]; label?: string }) {
+  return (
+    <details className="relative [&_summary::-webkit-details-marker]:hidden">
+      <summary aria-label={label} className="grid size-10 cursor-pointer list-none place-items-center text-muted">
+        <Ellipsis size={20} strokeWidth={1.75} />
+      </summary>
+      <div className="absolute right-0 z-30 mt-1 min-w-44 border border-line bg-raise py-1 shadow-2xl">
+        {items.map((it) => (
+          <button
+            key={it.label}
+            type="button"
+            onClick={(e) => {
+              (e.currentTarget.closest("details") as HTMLDetailsElement).open = false;
+              it.onSelect();
+            }}
+            className={`block w-full px-4 py-3 text-left text-body ${it.danger ? "text-danger" : "text-fg"} active:bg-surface`}
+          >
+            {it.label}
+          </button>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+/** Segmented switch between a screen's views (an event's Prep / Live / Recap). */
+export function Segmented<K extends string>({
+  value,
+  options,
+  onChange,
+  label,
+}: {
+  value: K;
+  options: { key: K; label: ReactNode }[];
+  onChange: (key: K) => void;
+  label: string;
+}) {
+  return (
+    <div role="tablist" aria-label={label} className="grid auto-cols-fr grid-flow-col border border-line">
+      {options.map((o) => (
+        <button
+          key={o.key}
+          type="button"
+          role="tab"
+          aria-selected={value === o.key}
+          onClick={() => onChange(o.key)}
+          className={`min-h-10 text-meta font-semibold ${value === o.key ? "bg-fg text-bg" : "text-muted"}`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
   );
 }
 

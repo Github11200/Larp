@@ -53,6 +53,10 @@ These files glue chunks together. Add your line; don't restructure them without 
 | `server/src/lib/llm.ts` | owned by whoever wires the LLM provider; everyone calls `askJson` / `streamText` |
 | `web/src/App.tsx`, `web/src/routes.ts` | your screen + its path |
 
+## Screen flow
+
+The event hub (`/events/:id/:stage`, `web/src/features/event/`) is the spine: **Prep** (ranked guest list) → **Live** (who's met, chats tonight) → **Recap** (that event's follow-ups). Live mode is opened from an event (`paths.live({ eventId, personId })`), shows the event, and End returns to the hub. Tabs are Events · People · Me; `/` redirects to today's (else newest) event. Link to an event's stage with `paths.event(id, stage)`; new screens reuse `Row`, `Pill`, `Menu` and the four `text-*` sizes in `components/ui.tsx` / `index.css`.
+
 ## The five seams
 
 Every connection between chunks goes through one of these. If you need a connection none of them covers, raise it with the team before building it.

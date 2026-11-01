@@ -104,7 +104,7 @@ export class LiveSession implements LiveContext {
   async handle(msg: ClientMsg): Promise<void> {
     switch (msg.type) {
       case "start":
-        return this.start(msg.personId, msg.conversationId);
+        return this.start(msg.personId, msg.conversationId, msg.eventId);
       case "set_person":
         return this.setPerson(msg.personId);
       case "add_participant":
@@ -198,14 +198,14 @@ export class LiveSession implements LiveContext {
     this.send({ type: "ended", conversationId: this.conversation.id });
   }
 
-  private async start(personId?: string, conversationId?: string): Promise<void> {
+  private async start(personId?: string, conversationId?: string, eventId?: string): Promise<void> {
     if (this.started) return this.resumeLive(); // reconnect to a conversation still in memory
     this.started = true;
     this.profile = await db.profiles.get(this.userId, "me");
     const resumed = conversationId ? await this.adoptSaved(conversationId) : false;
     open.set(key(this.userId, this.conversation.id), this);
     if (!resumed && personId) await this.setPerson(personId);
-    if (!this.event) await this.pickEvent();
+    if (!this.event) await this.pickEvent(eventId);
     this.openStt();
     this.sendReady(resumed);
   }
@@ -249,9 +249,9 @@ export class LiveSession implements LiveContext {
     this.sendParticipants();
   }
 
-  /** The person's event, else the newest one: whose attendees caught names are matched against. */
-  private async pickEvent(): Promise<void> {
-    const eventId = this.person?.eventId ?? (await db.events.list(this.userId)).at(-1)?.id;
+  /** The person's event, else the one you went live from, else the newest: whose attendees caught names are matched against. */
+  private async pickEvent(chosen?: string): Promise<void> {
+    const eventId = this.person?.eventId ?? chosen ?? (await db.events.list(this.userId)).at(-1)?.id;
     this.event = eventId ? await db.events.get(this.userId, eventId) : null;
     this.conversation.eventId = this.event?.id;
   }

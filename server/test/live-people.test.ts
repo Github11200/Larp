@@ -66,6 +66,15 @@ test("1:1 with a stranger: a caught name becomes a participant; general openers 
   expect(saved?.personId).toBeUndefined();
 });
 
+test("going live from an older event's screen uses that event, not the newest", async () => {
+  const userId = await newUser();
+  await db.events.put(userId, { id: "evt-newer", name: "Newer", status: "ready", createdAt: Date.now() + 1000 });
+  const r = recorder();
+  const s = new LiveSession(userId, r.transport, listeners);
+  await s.handle({ type: "start", eventId: "evt-demo" });
+  expect(r.of("ready")[0]).toMatchObject({ eventId: "evt-demo" });
+});
+
 test("a caught name that matches an attendee attaches their dossier and whispers who they are", async () => {
   const userId = await newUser();
   const r = recorder();

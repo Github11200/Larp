@@ -1,13 +1,11 @@
-// Chunk 4 · Every event you've prepped: coming up vs. been there. Tap one to switch to it.
+// Chunk 4 · Every event you've prepped: coming up vs. been there. Tap one to open its hub.
 import { api, type Event } from "@larp/shared";
-import { ChevronRight, Plus } from "lucide-react";
-import { Link } from "react-router";
-import { ButtonLink, Notice, Pending, SectionLabel, Title } from "../../components/ui";
+import { Plus } from "lucide-react";
+import { ButtonLink, Notice, Pending, Pill, Row, Rows, SectionLabel, Title } from "../../components/ui";
 import { useApi } from "../../lib/useApi";
 import { paths } from "../../routes";
-import { formatWhen, friendlyError } from "./format";
-
-const when = (e: Event) => (e.date ? new Date(e.date).getTime() : (e.createdAt ?? 0));
+import { dayOf, whenLabel } from "../event/journey";
+import { friendlyError } from "./format";
 
 export function EventsListPage() {
   const events = useApi(api.listEvents, undefined, (es) => es.some((e) => e.status === "pending"));
@@ -15,49 +13,50 @@ export function EventsListPage() {
   if (events.error) return <Notice>{friendlyError(events.error)}</Notice>;
 
   const list = events.data ?? [];
-  const newest = list.at(-1)?.id;
   const today = new Date().setHours(0, 0, 0, 0);
-  const upcoming = list.filter((e) => when(e) >= today).sort((a, b) => when(a) - when(b));
-  const past = list.filter((e) => when(e) < today).sort((a, b) => when(b) - when(a));
+  const upcoming = list.filter((e) => dayOf(e) >= today).sort((a, b) => dayOf(a) - dayOf(b));
+  const past = list.filter((e) => dayOf(e) < today).sort((a, b) => dayOf(b) - dayOf(a));
 
   return (
     <div className="space-y-8">
-      <Title sub="Live mode preps you for the newest one. Tap any event to see its people.">Your events</Title>
-      <ButtonLink to={paths.newEvent()} variant="secondary" className="w-full">
-        <Plus size={18} strokeWidth={1.75} aria-hidden />
-        New event
-      </ButtonLink>
-      {!list.length && <p className="text-[15px] text-muted">No events yet. Your social calendar is a blank canvas.</p>}
-      <EventList title="Coming up" events={upcoming} newest={newest} />
-      <EventList title="Been there" events={past} newest={newest} />
+      <div className="flex items-end justify-between gap-4">
+        <Title>Events</Title>
+        <ButtonLink to={paths.newEvent()} variant="secondary" className="min-h-10 px-3">
+          <Plus size={16} strokeWidth={2} aria-hidden />
+          New
+        </ButtonLink>
+      </div>
+      {!list.length && <p className="text-body text-muted">No events yet. Your social calendar is a blank canvas.</p>}
+      <EventList title="Coming up" events={upcoming} />
+      <EventList title="Been there" events={past} />
     </div>
   );
 }
 
-function EventList({ title, events, newest }: { title: string; events: Event[]; newest?: string }) {
+function EventList({ title, events }: { title: string; events: Event[] }) {
   if (!events.length) return null;
   return (
     <section className="space-y-2">
       <SectionLabel>{title}</SectionLabel>
-      <ul className="divide-y divide-line border-y border-line">
+      <Rows>
         {events.map((e) => (
           <li key={e.id}>
-            <Link to={paths.event(e.id)} className="flex items-center gap-3 py-4 active:bg-raise">
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-serif text-[1.35rem] leading-tight">{e.name}</span>
-                <span className="mt-0.5 block text-[14px] text-muted">
-                  {[e.date ? formatWhen(e.date) : e.createdAt && `Added ${formatWhen(e.createdAt)}`, statusLine(e), e.id === newest && "current"]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </span>
-              </span>
-              <ChevronRight size={18} strokeWidth={1.75} className="shrink-0 text-muted" aria-hidden />
-            </Link>
+            <Row
+              to={paths.event(e.id)}
+              title={<span className="text-title font-normal">{e.name}</span>}
+              meta={whenLabel(e) === "Today" ? undefined : (whenLabel(e) ?? (e.createdAt ? `Added ${new Date(e.createdAt).toLocaleDateString()}` : undefined))}
+              trail={statusPill(e)}
+            />
           </li>
         ))}
-      </ul>
+      </Rows>
     </section>
   );
 }
 
-const statusLine = (e: Event) => (e.status === "pending" ? "scouting…" : e.status === "error" ? "couldn't prep" : undefined);
+function statusPill(e: Event) {
+  if (e.status === "pending") return <Pill tone="live">Scouting</Pill>;
+  if (e.status === "error") return <Pill>Needs names</Pill>;
+  if (whenLabel(e) === "Today") return <Pill tone="live">Today</Pill>;
+  return null;
+}

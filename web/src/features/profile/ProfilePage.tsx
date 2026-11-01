@@ -18,7 +18,7 @@ export function ProfilePage() {
   if (!hasContent || !p) {
     return (
       <div className="space-y-8">
-        <Title sub="Feed me your resume and links. I'll make you sound like you did your homework.">Who are you?</Title>
+        <Title sub="Resume and links. I'll do the homework.">Who are you?</Title>
         {p?.status === "error" && <Notice>That flopped. Try again?</Notice>}
         <BuildForm cta="Learn me" onStarted={() => void profile.reload()} />
       </div>
@@ -26,15 +26,12 @@ export function ProfilePage() {
   }
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       {p.status === "error" && <Notice>Rebuild flopped. Your old profile is still here.</Notice>}
       <ProfileCard profile={p} onSave={save} />
       <details className="group border-t border-line">
         <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 py-3 [&::-webkit-details-marker]:hidden">
-          <span>
-            <span className="block text-[16px] font-semibold">Add more about you</span>
-            <span className="block text-[14px] text-muted">New resume, more links. It adds to what it already knows.</span>
-          </span>
+          <span className="text-body font-semibold">Add more about you</span>
           <ChevronDown size={20} strokeWidth={1.75} aria-hidden className="shrink-0 text-muted transition-transform group-open:rotate-180" />
         </summary>
         <div className="pt-3 pb-2">
@@ -91,7 +88,7 @@ function Learning() {
   return (
     <div className="flex min-h-[60dvh] flex-col items-center justify-center gap-6 text-center">
       <Pending>Learning you</Pending>
-      <p key={i} aria-hidden className="max-w-[18ch] animate-hand-in font-serif text-[2rem] leading-[1.1] text-balance">
+      <p key={i} aria-hidden className="max-w-[18ch] animate-hand-in text-display text-balance">
         {LINES[i]}
       </p>
     </div>

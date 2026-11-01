@@ -20,15 +20,18 @@ await page.goto(`${base}/?user=smoke-${Date.now()}`);
 // New users land in guided setup; take the demo-crowd shortcut.
 await page.getByText("Skip, use the demo crowd").click();
 await page.getByText("Read the dossiers first").click();
+// Lands on the event hub, Prep stage.
 await page.getByText("Sam Chen").waitFor();
-await shot("1-people");
+await page.getByRole("tab", { name: /Prep/, selected: true }).waitFor();
+await shot("1-hub-prep");
 
 await page.getByText("Sam Chen").click();
-await page.getByText("Say this").waitFor();
+await page.getByText("Talk to Sam").waitFor();
 await shot("2-person");
 
 await page.getByText("Talk to Sam").click();
 await page.getByText("Talking to Sam Chen").waitFor();
+await page.getByTestId("live-event").filter({ hasText: "Demo Night" }).waitFor(); // live knows which event you're at
 await page.getByText("demo: type a line").click();
 const input = page.getByPlaceholder("type what someone says…");
 await input.fill("Do you have a demo?");
@@ -41,10 +44,14 @@ await input.fill("Sure, I'll send you the deck");
 await page.getByRole("button", { name: "me", exact: true }).click();
 await shot("4-live");
 
-await page.getByRole("button", { name: "End", exact: true }).click();
-await page.getByRole("heading", { name: "You promised" }).waitFor();
+// End returns to the event: the chat shows up under Live, then its follow-up under Recap.
+await page.getByRole("button", { name: "End chat" }).click();
+await page.getByText(/Tonight so far/).waitFor();
+await shot("5-hub-live");
+await page.getByRole("tab", { name: /Recap/ }).click();
 await page.getByText("Skip to a week later").click();
-await shot("5-followups");
+await page.getByTestId("due-now").waitFor();
+await shot("6-recap");
 
 await browser.close();
 if (errors.length) {

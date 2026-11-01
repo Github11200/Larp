@@ -22,7 +22,7 @@ export function SetupFrame({ step, back, children, actions }: { step: SetupStep;
           {STEPS.map((s, i) => (
             <li key={s.step} className="flex-1">
               <span className={`block h-[3px] ${i <= current ? "bg-fg" : "bg-line"}`} />
-              <span className={`mt-1.5 block text-[12px] ${i === current ? "text-fg" : "text-muted"}`}>{s.label}</span>
+              <span className={`mt-1.5 block text-meta ${i === current ? "text-fg" : "text-muted"}`}>{s.label}</span>
             </li>
           ))}
         </ol>

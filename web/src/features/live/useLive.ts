@@ -39,7 +39,8 @@ const writeStored = (s: Stored | null) => {
   }
 };
 
-export function useLive(personId?: string) {
+/** `chosenEvent`: the event you went live from; the server falls back to the person's, else the newest. */
+export function useLive(personId?: string, chosenEvent?: string) {
   const ws = useRef<WebSocket>(null);
   /** Lines, taps and End sent before the server is ready (slow connect, reconnect) wait here instead of vanishing. */
   const ready = useRef(false);
@@ -72,7 +73,7 @@ export function useLive(personId?: string) {
         attempt = 0;
         const stored = readStored();
         const resume = stored && stored.person === personId ? stored.id : undefined;
-        const start: ClientMsg = { type: "start", personId: resume ? undefined : personId, conversationId: resume };
+        const start: ClientMsg = { type: "start", personId: resume ? undefined : personId, eventId: chosenEvent, conversationId: resume };
         socket.send(JSON.stringify(start));
       };
       socket.onmessage = (e) => {
@@ -132,7 +133,7 @@ export function useLive(personId?: string) {
       audio.current?.close();
       setMic("off");
     };
-  }, [personId]);
+  }, [personId, chosenEvent]);
 
   function send(msg: ClientMsg) {
     if (ready.current && ws.current?.readyState === WebSocket.OPEN) ws.current.send(JSON.stringify(msg));

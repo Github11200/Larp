@@ -1,9 +1,19 @@
 import type { ContactStatus } from "@larp/shared";
+import type { ComponentProps } from "react";
+import type { Pill } from "../../components/ui";
 
-/** Where things stand with someone, in two or three words. */
+/** Where things stand with someone, in a word or two. */
 export const statusLabel: Record<ContactStatus, string> = {
-  listed: "on a guest list",
-  prepped: "dossier ready",
-  talked: "talked",
-  followup: "follow-up open",
+  listed: "Guest list",
+  prepped: "Dossier",
+  talked: "Talked",
+  followup: "Follow up",
+};
+
+/** Orange only when you owe them something. */
+export const statusTone: Record<ContactStatus, ComponentProps<typeof Pill>["tone"]> = {
+  listed: "plain",
+  prepped: "plain",
+  talked: "done",
+  followup: "live",
 };
