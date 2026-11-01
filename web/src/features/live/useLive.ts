@@ -180,7 +180,7 @@ export function useLive(personId?: string, chosenEvent?: string) {
         setTimeout(resolve, 3000); // don't strand the user if the socket is gone
         send({ type: "stop" });
       }),
-    /** Both volume buttons: "they just spoke, tell me what to say." */
+    /** "They just spoke, tell me what to say." On-screen button, or an earbud button where the browser routes it. */
     nudge: () => send({ type: "nudge" }),
   };
 }

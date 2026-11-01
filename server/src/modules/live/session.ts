@@ -144,7 +144,7 @@ export class LiveSession implements LiveContext {
     const now = Date.now();
     if (now - this.lastNudgeAt < NUDGE_GAP_MS) return;
     this.lastNudgeAt = now;
-    const latest = this.conversation.transcript.findLast((u) => u.speaker === "unknown");
+    const latest = [...this.conversation.transcript].reverse().find((u) => u.speaker === "unknown");
     if (latest) this.setSpeaker(latest, "them");
     await this.fanOut("onNudge", (l) => l.onNudge?.(this));
   }
