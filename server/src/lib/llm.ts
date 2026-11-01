@@ -60,9 +60,12 @@ function route(model: string): { provider: Provider; id: string } {
 
 /** One call, typed JSON back, validated against the schema. */
 export async function askJson<S extends z.ZodType>(schema: S, ask: Ask): Promise<z.output<S>> {
-  const res = await complete(ask, "smart", false, {
+  const jsonSchema = z.toJSONSchema(schema);
+  // Non-strict schemas are only a hint, and models invent their own keys (e.g. "scores" instead of "ranked"). Spell it out.
+  const prompt = `${ask.prompt}\n\nReply with only JSON matching this JSON Schema, same keys exactly:\n${JSON.stringify(jsonSchema)}`;
+  const res = await complete({ ...ask, prompt }, "smart", false, {
     // Not strict: OpenAI's strict mode rejects optional fields; zod validates the result below anyway.
-    response_format: { type: "json_schema", json_schema: { name: "result", schema: z.toJSONSchema(schema), strict: false } },
+    response_format: { type: "json_schema", json_schema: { name: "result", schema: jsonSchema, strict: false } },
   });
   const body = (await res.json()) as { choices: { message: { content: string } }[] };
   // Models often write `null` for an unknown optional field; treat it as absent so one gap doesn't reject the whole answer.
