@@ -8,6 +8,7 @@ import { env } from "../env";
 interface DocStore {
   get(userId: string, coll: string, id: string): Promise<unknown | null>;
   put(userId: string, coll: string, id: string, data: unknown): Promise<void>;
+  /** Order differs by backend (memory: first insert, Postgres: last update). Sort in the caller if it matters. */
   list(userId: string, coll: string): Promise<unknown[]>;
   remove(userId: string, coll: string, id: string): Promise<void>;
   /** Across all users. For cron-style jobs only. */

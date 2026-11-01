@@ -41,7 +41,8 @@ function Picker({ event }: { event: Event }) {
   const navigate = useNavigate();
   const finish = (to: string) => {
     // Fire and forget: dossiers build on the worker while you walk over to say hi.
-    for (const id of chosen) void call(api.requestDossier, { params: { id } }).catch(() => {});
+    const ready = new Set(list.filter((p) => p.dossierStatus === "ready" || p.dossierStatus === "pending").map((p) => p.id));
+    for (const id of chosen) if (!ready.has(id)) void call(api.requestDossier, { params: { id } }).catch(() => {});
     navigate(to);
   };
 

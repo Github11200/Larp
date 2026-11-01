@@ -15,7 +15,7 @@ export const jobs = {
     run: prepEvent,
   },
   "prep.dossier": {
-    payload: z.object({ userId: z.string(), personId: z.string() }),
+    payload: z.object({ userId: z.string(), personId: z.string(), fresh: z.boolean().optional() }),
     run: prepDossier,
   },
   "followups.summarize": { payload: z.object({ userId: z.string(), conversationId: z.string() }), run: summarize },

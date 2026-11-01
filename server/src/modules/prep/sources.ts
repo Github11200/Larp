@@ -18,11 +18,30 @@ export interface EventPage {
   guests: Guest[];
 }
 
+/** A prep failure the user can act on; the message is shown as-is. */
+export class PrepError extends Error {}
+
+const UNREADABLE = "Couldn't read that link (the page ghosted us). Paste the guest list or drop screenshots instead.";
+
+/** Pages without guests aren't cached, so a fixed or newly public page is re-read next time. */
 export function scrapeEvent(url: string): Promise<EventPage> {
-  return cached("event", url, async () => {
-    const html = await (await fetch(url, { headers: { "user-agent": "Mozilla/5.0" } })).text();
-    return lumaPage(html) ?? genericPage(html);
-  });
+  return cached("event", url, () => fetchEventPage(url), { keep: (p) => p.guests.length > 0 });
+}
+
+async function fetchEventPage(url: string): Promise<EventPage> {
+  const res = await fetch(normalizeLink(url), { headers: { "user-agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(10_000) }).catch(() => null);
+  if (!res?.ok) throw new PrepError(UNREADABLE);
+  const html = await res.text();
+  const page = lumaPage(html) ?? genericPage(html);
+  // Luma serves its 404 page as a 200.
+  if (!page.name || /not found|\b404\b/i.test(page.name)) throw new PrepError(UNREADABLE);
+  return page;
+}
+
+/** Bios have "example.com" and "@handle"; links must be absolute to open (and to dedupe). */
+export function normalizeLink(link: string): string {
+  const l = link.trim();
+  return /^https?:\/\//i.test(l) ? l : `https://${l.replace(/^\/+/, "")}`;
 }
 
 interface LumaPerson {
@@ -46,9 +65,11 @@ function lumaPage(html: string): EventPage | undefined {
 function lumaGuest(p: LumaPerson, role?: string): Guest {
   const links = [
     p.linkedin_handle && `https://linkedin.com${p.linkedin_handle.startsWith("/") ? "" : "/in/"}${p.linkedin_handle}`,
-    p.twitter_handle && `https://x.com/${p.twitter_handle}`,
+    p.twitter_handle && `https://x.com/${p.twitter_handle.replace(/^@/, "")}`,
     p.website,
-  ].filter((l): l is string => Boolean(l));
+  ]
+    .filter((l): l is string => Boolean(l?.trim()))
+    .map(normalizeLink);
   const headline = [role, p.bio_short].filter(Boolean).join(" · ") || undefined;
   return { name: p.name, headline, photoUrl: p.avatar_url, links };
 }
@@ -94,10 +115,16 @@ export const parseGuestList = (text = ""): Guest[] =>
     .map((s) => s.trim())
     .filter(Boolean)
     .map((line) => {
+      // Links anywhere on the line ("Sam Chen - Founder, linkedin.com/in/sam") become links, not headline.
+      const links = line.match(LINK)?.map(normalizeLink) ?? [];
+      const text = line.replace(LINK, "").replace(/[\s,|–—-]+$/, "").trim();
       // "Name - headline" or "Name, headline" both work.
-      const [name, ...rest] = line.split(/\s+[-–—|]\s+|,\s+/);
-      return { name, headline: rest.join(", ") || undefined, links: [] };
-    });
+      const [name, ...rest] = text.split(/\s+[-–—|]\s+|,\s+/);
+      return { name, headline: rest.join(", ") || undefined, links };
+    })
+    .filter((g) => g.name);
+
+const LINK = /\b(?:https?:\/\/\S+|(?:www\.)?(?:linkedin\.com|x\.com|twitter\.com|github\.com)\/\S+)/gi;
 
 /** Same person from two sources (e.g. Luma + screenshot) keeps the richer entry. */
 export function dedupe(guests: Guest[]): Guest[] {

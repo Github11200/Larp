@@ -46,6 +46,8 @@ export const Event = z.object({
   date: z.string().optional(),
   status: Status,
   error: z.string().optional(),
+  /** ms epoch. Events list oldest -> newest by this, so `.at(-1)` is the newest. */
+  createdAt: z.number().optional(),
 });
 export type Event = z.infer<typeof Event>;
 
@@ -74,6 +76,20 @@ export const Person = z.object({
   contactId: z.string().optional(),
 });
 export type Person = z.infer<typeof Person>;
+
+/** One human across every event, conversation, and follow-up. Persons are per-event; a Contact links them. */
+export const Contact = z.object({
+  id: z.string(),
+  name: z.string(),
+  headline: z.string().optional(),
+  photoUrl: z.string().optional(),
+  links: z.array(z.string()).default([]),
+  personIds: z.array(z.string()).default([]),
+  eventIds: z.array(z.string()).default([]),
+  note: z.string().optional(),
+  createdAt: z.number(),
+});
+export type Contact = z.infer<typeof Contact>;
 
 // ---------- Live (chunks 1, 2) ----------
 

@@ -1,7 +1,7 @@
 // REST contract between web and server. Both sides import these, so a mismatch is a type error.
 // Every request carries the `x-user-id` header (see USER_HEADER); data is scoped per user.
 import { z } from "zod";
-import { Conversation, Event, FollowUp, Participant, Person, Profile } from "./models";
+import { Contact, Conversation, Event, FollowUp, Participant, Person, Profile } from "./models";
 
 export const USER_HEADER = "x-user-id";
 
@@ -43,6 +43,38 @@ export const CreateEventInput = z
 
 export const Ok = z.object({ ok: z.literal(true) });
 
+/** Where things stand with a contact, for the "Your people" list. */
+export const ContactStatus = z.enum(["listed", "prepped", "talked", "followup"]);
+export type ContactStatus = z.infer<typeof ContactStatus>;
+
+export const ContactRow = Contact.extend({
+  status: ContactStatus,
+  /** ms epoch of the latest thing that happened with them; list is sorted newest first. */
+  lastAt: z.number(),
+});
+export type ContactRow = z.infer<typeof ContactRow>;
+
+/** Everything you have on one human: matched by contactId, any linked personId, or participant name. */
+export const ContactTimeline = z.object({
+  contact: Contact,
+  status: ContactStatus,
+  people: z.array(Person),
+  events: z.array(Event),
+  conversations: z.array(Conversation),
+  followUps: z.array(FollowUp),
+});
+export type ContactTimeline = z.infer<typeof ContactTimeline>;
+
+export const CreateContactInput = z.object({
+  name: z.string().trim().min(1),
+  link: z.string().optional(),
+  note: z.string().optional(),
+  /** Met them at this event. */
+  eventId: z.string().optional(),
+});
+
+export const UpdateContactInput = Contact.pick({ name: true, headline: true, note: true, links: true }).partial();
+
 export const api = {
   // chunk 3 · profile
   getProfile: route({ method: "GET", path: "/api/profile", res: Profile.nullable() }),
@@ -55,7 +87,29 @@ export const api = {
   getEvent: route({ method: "GET", path: "/api/events/:id", res: Event }),
   listPeople: route({ method: "GET", path: "/api/events/:id/people", res: z.array(Person) }),
   getPerson: route({ method: "GET", path: "/api/people/:id", res: Person }),
-  requestDossier: route({ method: "POST", path: "/api/people/:id/dossier", res: Person }),
+  /** `fresh: true` skips cached research/LLM output (regenerate). */
+  requestDossier: route({
+    method: "POST",
+    path: "/api/people/:id/dossier",
+    body: z.object({ fresh: z.boolean().optional() }).optional(),
+    res: Person,
+  }),
+  /** Add names/screenshots to an existing event and re-prep it; existing people keep their dossiers. */
+  addGuests: route({
+    method: "POST",
+    path: "/api/events/:id/guests",
+    body: z.object({ guestList: z.string().optional(), screenshots: z.array(z.string()).optional() }),
+    res: Event,
+  }),
+  updateEvent: route({ method: "PATCH", path: "/api/events/:id", body: Event.pick({ name: true }).partial(), res: Event }),
+  /** Also removes its people and unlinks them from contacts. */
+  deleteEvent: route({ method: "DELETE", path: "/api/events/:id", res: Ok }),
+
+  // chunk 4 · contacts (one human across events)
+  listContacts: route({ method: "GET", path: "/api/contacts", res: z.array(ContactRow) }),
+  getContact: route({ method: "GET", path: "/api/contacts/:id", res: ContactTimeline }),
+  createContact: route({ method: "POST", path: "/api/contacts", body: CreateContactInput, res: Contact }),
+  updateContact: route({ method: "PATCH", path: "/api/contacts/:id", body: UpdateContactInput, res: Contact }),
 
   // chunk 5 · follow-ups
   listConversations: route({ method: "GET", path: "/api/conversations", res: z.array(Conversation) }),

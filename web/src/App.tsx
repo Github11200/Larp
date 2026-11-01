@@ -2,8 +2,11 @@
 import { BrowserRouter, Route, Routes } from "react-router";
 import { FirstRunGate } from "./components/FirstRunGate";
 import { Layout } from "./components/Layout";
+import { ContactPage } from "./features/contacts/ContactPage";
+import { ContactsPage } from "./features/contacts/ContactsPage";
 import { FollowUpsPage } from "./features/followups/FollowUpsPage";
 import { LivePage } from "./features/live/LivePage";
+import { EventsListPage } from "./features/prep/EventsListPage";
 import { EventsPage } from "./features/prep/EventsPage";
 import { PersonPage } from "./features/prep/PersonPage";
 import { ProfilePage } from "./features/profile/ProfilePage";
@@ -22,6 +25,10 @@ export function App() {
               </FirstRunGate>
             }
           />
+          <Route path="events" element={<EventsListPage />} />
+          <Route path="events/:id" element={<EventsPage />} />
+          <Route path="contacts" element={<ContactsPage />} />
+          <Route path="contacts/:id" element={<ContactPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="people/:id" element={<PersonPage />} />
           <Route path="followups" element={<FollowUpsPage />} />
