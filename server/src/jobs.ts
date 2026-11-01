@@ -14,7 +14,7 @@ export const jobs = {
     run: prepEvent,
   },
   "prep.dossier": {
-    payload: z.object({ userId: z.string(), personId: z.string() }),
+    payload: z.object({ userId: z.string(), personId: z.string(), fresh: z.boolean().optional() }),
     run: prepDossier,
   },
 } satisfies Record<string, { payload: z.ZodType; run: (p: never) => Promise<void> }>;

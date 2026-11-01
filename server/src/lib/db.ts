@@ -1,5 +1,5 @@
 // Every collection in the app. Import from here rather than calling collection() elsewhere.
-import { Conversation, Event, FollowUp, Person, Profile } from "@larp/shared";
+import { Contact, Conversation, Event, FollowUp, Person, Profile } from "@larp/shared";
 import { collection } from "./store";
 
 export const db = {
@@ -8,6 +8,7 @@ export const db = {
   people: collection("people", Person),
   conversations: collection("conversations", Conversation),
   followUps: collection("followups", FollowUp),
+  contacts: collection("contacts", Contact),
 };
 
 export const newId = () => crypto.randomUUID();

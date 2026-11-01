@@ -5,6 +5,7 @@ import express, { Router } from "express";
 import { env } from "./env";
 import { handle } from "./http/route";
 import { seedDemo } from "./lib/seed";
+import { contactRoutes } from "./modules/contacts/routes";
 import { followUpRoutes } from "./modules/followups/routes";
 import { prepRoutes } from "./modules/prep/routes";
 import { profileRoutes } from "./modules/profile/routes";
@@ -22,6 +23,6 @@ export function createApp() {
     return { ok: true as const };
   });
 
-  app.use(profileRoutes, prepRoutes, followUpRoutes, dev);
+  app.use(profileRoutes, prepRoutes, contactRoutes, followUpRoutes, dev);
   return app;
 }
