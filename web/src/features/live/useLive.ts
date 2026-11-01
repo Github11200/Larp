@@ -41,6 +41,9 @@ const writeStored = (s: Stored | null) => {
 
 export function useLive(personId?: string) {
   const ws = useRef<WebSocket>(null);
+  /** Lines, taps and End sent before the server is ready (slow connect, reconnect) wait here instead of vanishing. */
+  const ready = useRef(false);
+  const queue = useRef<ClientMsg[]>([]);
   const audio = useRef<LiveAudio>(null);
   const onEnded = useRef<() => void>(null);
   const [status, setStatus] = useState<LiveStatus>("connecting");
@@ -69,7 +72,8 @@ export function useLive(personId?: string) {
         attempt = 0;
         const stored = readStored();
         const resume = stored && stored.person === personId ? stored.id : undefined;
-        send({ type: "start", personId: resume ? undefined : personId, conversationId: resume });
+        const start: ClientMsg = { type: "start", personId: resume ? undefined : personId, conversationId: resume };
+        socket.send(JSON.stringify(start));
       };
       socket.onmessage = (e) => {
         if (typeof e.data !== "string") return audio.current?.play(e.data);
@@ -78,6 +82,7 @@ export function useLive(personId?: string) {
         onMessage(parsed.data);
       };
       socket.onclose = () => {
+        ready.current = false;
         if (closed || ws.current !== socket) return;
         setStatus("reconnecting");
         retry = setTimeout(connect, Math.min(500 * 2 ** attempt++, 5000));
@@ -89,6 +94,8 @@ export function useLive(personId?: string) {
         case "ready":
           writeStored({ id: msg.conversationId, person: personId });
           setConversationId(msg.conversationId);
+          ready.current = true;
+          queue.current.splice(0).forEach(send);
           setEars(msg.ears ?? true);
           setEventId(msg.eventId);
           setLines([]); // the server replays the transcript right after
@@ -117,6 +124,8 @@ export function useLive(personId?: string) {
     connect();
     return () => {
       closed = true;
+      ready.current = false;
+      queue.current = []; // never replay into the next person's conversation
       clearTimeout(retry);
       ws.current?.close(); // the server keeps the conversation for a bit in case we come back
       ws.current = null;
@@ -126,7 +135,8 @@ export function useLive(personId?: string) {
   }, [personId]);
 
   function send(msg: ClientMsg) {
-    if (ws.current?.readyState === WebSocket.OPEN) ws.current.send(JSON.stringify(msg));
+    if (ready.current && ws.current?.readyState === WebSocket.OPEN) ws.current.send(JSON.stringify(msg));
+    else queue.current.push(msg);
   }
 
   /** The big Start tap. Must be called straight from the tap handler (iOS audio rules). */
