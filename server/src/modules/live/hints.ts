@@ -5,18 +5,23 @@
 import type { Person, Speaker, Utterance } from "@larp/shared";
 import { llmAvailable, streamText } from "../../lib/llm";
 import type { LiveContext, LiveListener } from "./session";
-import { buildSystem, parseReply, stallPrompt, turnPrompt } from "./hintPrompt";
+import { buildSystem, linesSinceMe, parseReply, stallPrompt, turnPrompt } from "./hintPrompt";
 
 const STALL_MS = 7000;
 /** Back-to-back whispers talk over each other; this keeps at most one per window. */
 const COOLDOWN_MS = 4000;
 /** A hint later than this is useless anyway, and must not hold up saving the conversation. */
 const LLM_TIMEOUT_MS = 5000;
+/** Quiet for this many lines while others talk = left out of the chat; offer a way in. */
+const JOIN_AFTER_LINES = 3;
+/** At most one "way in" nudge per window, so the coach doesn't nag while you pick your moment. */
+const JOIN_EVERY_MS = 20_000;
 
 interface HintState {
   /** Bumped on every line; a hint whose line has been followed by another is stale and dropped. */
   seq: number;
   lastHintAt: number;
+  lastJoinAt: number;
   stallTimer?: NodeJS.Timeout;
   /** Prepped people already introduced (or there from the start), so each gets one "that's X" whisper. */
   introduced: Set<string>;
@@ -26,7 +31,7 @@ interface HintState {
 const states = new WeakMap<LiveContext, HintState>();
 const stateOf = (ctx: LiveContext) =>
   states.get(ctx) ??
-  states.set(ctx, { seq: 0, lastHintAt: 0, introduced: new Set(ctx.people.map((p) => p.id)), stubTurn: 0 }).get(ctx)!;
+  states.set(ctx, { seq: 0, lastHintAt: 0, lastJoinAt: 0, introduced: new Set(ctx.people.map((p) => p.id)), stubTurn: 0 }).get(ctx)!;
 
 export const hintsListener: LiveListener = {
   name: "hints",
@@ -47,7 +52,8 @@ export const hintsListener: LiveListener = {
     }
     if (!llmAvailable) return stubHint(ctx, st, u);
     if (u.speaker === "me") return; // you don't need a hint for what you just said
-    const reply = parseReply(await ask(ctx, turnPrompt(ctx.conversation.transcript, ctx.conversation.hints)));
+    const joinIn = leftOut(ctx, st);
+    const reply = parseReply(await ask(ctx, turnPrompt(ctx.conversation.transcript, ctx.conversation.hints, { joinIn })));
     if (u.speaker === "unknown" && reply.speaker) ctx.setSpeaker(u, reply.speaker);
     if (reply.hint && st.seq === seq) await whisper(ctx, st, reply.hint);
   },
@@ -55,6 +61,13 @@ export const hintsListener: LiveListener = {
     clearTimeout(stateOf(ctx).stallTimer);
   },
 };
+
+/** Claims the nudge window when true, so lines arriving close together can't each ask for one. */
+function leftOut(ctx: LiveContext, st: HintState): boolean {
+  if (linesSinceMe(ctx.conversation.transcript) < JOIN_AFTER_LINES || Date.now() - st.lastJoinAt < JOIN_EVERY_MS) return false;
+  st.lastJoinAt = Date.now();
+  return true;
+}
 
 async function stallHint(ctx: LiveContext, seq: number): Promise<void> {
   const st = stateOf(ctx);
@@ -92,11 +105,15 @@ function intro(p: Person): string {
   return topic ? `That's ${first}. Ask about ${lowerFirst(topic)}` : `That's ${first}. Ask what they're building`;
 }
 
-/** No LLM: answer their questions with an opener. */
+/** No LLM: answer their questions with an opener, and nudge you in when you've been left out. */
 async function stubHint(ctx: LiveContext, st: HintState, u: Utterance): Promise<void> {
-  if (!isThem(u.speaker) || !u.text.trim().endsWith("?")) return;
-  await whisper(ctx, st, stubOpener(ctx, st));
+  if (!isThem(u.speaker)) return;
+  if (u.text.trim().endsWith("?")) return whisper(ctx, st, stubOpener(ctx, st));
+  if (!leftOut(ctx, st)) return;
+  await whisper(ctx, st, JOIN_IN[st.stubTurn++ % JOIN_IN.length]);
 }
+
+const JOIN_IN = ["Jump in: ask how they got into that", "Add your take, then ask theirs", "Ask the quiet one what they think"];
 
 const GENERAL = ["Answer, then ask what they're building", "Ask what brought them here", "Ask their name, then use it"];
 

@@ -37,7 +37,7 @@ export function buildSystem(ctx: Pick<LiveContext, "profile" | "people" | "event
     "Line 1: who said the LAST line: me or them (or none if told so).",
     "Line 2: a hint for the user of at most 8 words, or - if no hint helps.",
     "",
-    "Give a hint when THEM just asked the user something, or the user seems stuck.",
+    "Give a hint when THEM just asked the user something, the user seems stuck, or the user is being left out of a group chat.",
     "A hint is the core of a strong answer drawn from the user's profile, or a sharp follow-up question,",
     "ideally a callback to something about THEM. Plain words, no quotes, no labels, no bullets, no preamble.",
     "Refer to other people by name or they/them; never guess gender.",
@@ -63,8 +63,22 @@ function describe(p: Person): string {
     .join("\n");
 }
 
-export function turnPrompt(transcript: Utterance[], hints: Hint[]): string {
-  return context(transcript, hints);
+/** `joinIn`: the others have been talking past the user, so the hint should be a way into the conversation. */
+export function turnPrompt(transcript: Utterance[], hints: Hint[], { joinIn = false } = {}): string {
+  return [context(transcript, hints), ...(joinIn ? ["", JOIN_IN] : [])].join("\n");
+}
+
+const JOIN_IN = [
+  "The user hasn't spoken in a while and the others are talking among themselves.",
+  "Unless someone just asked the user something, line 2 is a way in: a related topic, a quick take, or a flexible question",
+  "that riffs on the exact topic they're on and works even if the user only half-followed it.",
+  "Not a generic 'ask what they're building'. Still at most 8 words.",
+].join(" ");
+
+/** Lines said since the user last spoke. In a group, others can talk past you for a while. */
+export function linesSinceMe(transcript: Utterance[]): number {
+  const last = transcript.map((u) => u.speaker).lastIndexOf("me");
+  return transcript.length - 1 - last;
 }
 
 export function stallPrompt(transcript: Utterance[], hints: Hint[]): string {

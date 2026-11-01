@@ -6,17 +6,18 @@ import { parseReply } from "../src/modules/live/hintPrompt";
 import { hintsListener } from "../src/modules/live/hints";
 import { isEchoOfHint, LiveSession } from "../src/modules/live/session";
 
-const llm = vi.hoisted(() => ({ replies: [] as { text: string; delayMs: number }[] }));
+const llm = vi.hoisted(() => ({ replies: [] as { text: string; delayMs: number }[], prompts: [] as string[] }));
 vi.mock("../src/lib/llm", () => ({
   llmAvailable: true,
-  async *streamText() {
+  async *streamText(ask: { prompt: string }) {
+    llm.prompts.push(ask.prompt);
     const { text, delayMs } = llm.replies.shift() ?? { text: "them\n-", delayMs: 0 };
     await new Promise((r) => setTimeout(r, delayMs));
     yield text;
   },
 }));
 
-beforeEach(() => void (llm.replies = []));
+beforeEach(() => void ((llm.replies = []), (llm.prompts = [])));
 
 async function session() {
   await seedDemo("test-hints");
@@ -66,4 +67,26 @@ test("mic lines that echo a recent whisper are dropped, real speech is kept", ()
   expect(isEchoOfHint("mention your Larp coach demo.", hints, 3000)).toBe(true);
   expect(isEchoOfHint("Do you have a demo I can see?", hints, 3000)).toBe(false);
   expect(isEchoOfHint("mention your Larp coach demo", hints, 20000)).toBe(false); // too long ago
+});
+
+test("left out of a group chat: after 3 lines from others, the coach offers a way in, then waits", async () => {
+  const { s, hints } = await session();
+  const others = ["So who's going to the afterparty?", "Depends if the DJ is any good", "Last year's was all techno", "Techno at a hackathon is wild"];
+  llm.replies.push({ text: "them\n-", delayMs: 0 }, { text: "them\n-", delayMs: 0 }, { text: "them\nAsk what music they'd pick instead", delayMs: 0 });
+  for (const [i, text] of others.entries()) {
+    await s.handle({ type: "say", speaker: "them", text });
+    await vi.waitFor(() => expect(llm.prompts).toHaveLength(i + 1)); // real speech arrives seconds apart
+  }
+  expect(llm.prompts.map((p) => p.includes("a way in"))).toEqual([false, false, true, false]); // nudged once, then holds off
+  await vi.waitFor(() => expect(hints()).toContain("Ask what music they'd pick instead"));
+});
+
+test("speaking resets the left-out count", async () => {
+  const { s } = await session();
+  for (const [speaker, text] of [["them", "One"], ["them", "Two"], ["me", "Totally"], ["them", "Three"]] as const) {
+    await s.handle({ type: "say", speaker, text });
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  await vi.waitFor(() => expect(llm.prompts).toHaveLength(3)); // no LLM call for your own line
+  expect(llm.prompts.some((p) => p.includes("a way in"))).toBe(false);
 });
