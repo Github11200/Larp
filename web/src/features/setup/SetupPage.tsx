@@ -22,14 +22,15 @@ export function SetupPage() {
 
 function YouStep() {
   const profile = useApi(api.getProfile, undefined, (p) => !p || p.status === "pending");
-  const ready = profile.data?.status === "ready";
+  const p = profile.data;
+  const hasContent = Boolean(p && (p.name || p.links.length));
   return (
     <SetupFrame
       step="you"
       back={paths.setup()}
       actions={
-        <ButtonLink to={paths.setup("event")} variant={ready ? "primary" : "ghost"}>
-          {ready ? "Next: your event" : "Skip, I'll do this later"}
+        <ButtonLink to={paths.setup("event")} variant={hasContent ? "primary" : "ghost"}>
+          {hasContent ? "Next: your event" : "Skip, I'll do this later"}
         </ButtonLink>
       }
     >
