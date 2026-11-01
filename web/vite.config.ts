@@ -5,6 +5,11 @@ import { VitePWA } from "vite-plugin-pwa";
 
 // In dev, the API runs on :3000 and Vite proxies to it, so the web app always uses same-origin paths.
 // In prod (Render static site), VITE_API_URL points at the API service.
+// VITE_API_URL is baked in at build time. Blank on Render = every call hits the static site, so fail the build loudly.
+if (process.env.RENDER && !process.env.VITE_API_URL?.trim()) {
+  throw new Error("VITE_API_URL is not set. In Render → larp-web → Environment, set it to larp-api's URL (e.g. https://larp-api.onrender.com).");
+}
+
 export default defineConfig({
   plugins: [
     react(),

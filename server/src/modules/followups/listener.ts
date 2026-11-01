@@ -1,26 +1,9 @@
-// Chunk 5 · Turns a finished conversation into a follow-up.
-import { db, newId } from "../../lib/db";
+// Chunk 5 · Every finished conversation becomes notes, plus a follow-up per person we can name.
 import type { LiveListener } from "../live/session";
-
-const WEEK = 7 * 24 * 60 * 60 * 1000;
+import { startWriteUp } from "./summarize";
 
 export const followUpsListener: LiveListener = {
   name: "followups",
-  async onEnd(ctx) {
-    const { conversation, person } = ctx;
-    // TODO(chunk 5): askJson({ summary, promises, draft }, { model: "smart", prompt: <transcript> }).
-    // Stub: lines where you said "I'll ..." count as promises.
-    const promises = conversation.transcript.filter((u) => u.speaker === "me" && /\bI('ll| will)\b/i.test(u.text)).map((u) => u.text);
-    await db.followUps.put(ctx.userId, {
-      id: newId(),
-      conversationId: conversation.id,
-      personId: person?.id,
-      personName: person?.name ?? "Someone you met",
-      summary: `[stub] ${conversation.transcript.length} lines`,
-      promises,
-      draft: `Hey ${person?.name ?? "there"}, great meeting you!`,
-      dueAt: Date.now() + WEEK,
-      status: "open",
-    });
-  },
+  // The client waits on this before leaving live mode: quick fallback records now, the real write-up in a job.
+  onEnd: (ctx) => startWriteUp(ctx.userId, ctx.conversation),
 };

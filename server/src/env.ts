@@ -15,5 +15,15 @@ export const env = {
   /** Exa web search for person research (chunk 4). Unset = dossiers use only what the guest list had. */
   exaKey: process.env.EXA_API_KEY || undefined,
   /** Comma-separated origins allowed to call the API (the Render static site URL). Unset = any. */
-  webOrigins: process.env.WEB_ORIGIN?.split(",").map((s) => s.trim()),
+  webOrigins: origins(process.env.WEB_ORIGIN),
 };
+
+/** Browsers send "https://host" exactly; tolerate what people paste into a dashboard (trailing slash, no scheme, caps). */
+function origins(raw = ""): string[] | undefined {
+  const list = raw
+    .split(",")
+    .map((s) => s.trim().replace(/\/+$/, "").toLowerCase())
+    .filter(Boolean)
+    .map((s) => (/^https?:\/\//.test(s) ? s : `https://${s}`));
+  return list.length ? list : undefined;
+}

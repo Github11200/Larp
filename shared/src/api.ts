@@ -1,7 +1,7 @@
 // REST contract between web and server. Both sides import these, so a mismatch is a type error.
 // Every request carries the `x-user-id` header (see USER_HEADER); data is scoped per user.
 import { z } from "zod";
-import { Contact, Conversation, Event, FollowUp, Person, Profile } from "./models";
+import { Contact, Conversation, Event, FollowUp, Participant, Person, Profile } from "./models";
 
 export const USER_HEADER = "x-user-id";
 
@@ -113,6 +113,13 @@ export const api = {
 
   // chunk 5 · follow-ups
   listConversations: route({ method: "GET", path: "/api/conversations", res: z.array(Conversation) }),
+  /** Answer "who was this?" for a conversation; its follow-ups get (re)written. */
+  labelConversation: route({
+    method: "PATCH",
+    path: "/api/conversations/:id",
+    body: z.object({ participants: z.array(Participant) }),
+    res: Conversation,
+  }),
   listFollowUps: route({ method: "GET", path: "/api/followups", res: z.array(FollowUp) }),
   updateFollowUp: route({
     method: "PATCH",

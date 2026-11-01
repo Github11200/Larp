@@ -1,85 +1,131 @@
-// Chunk 5 · Who you met, what you promised, drafts ready to send.
-import { api, type FollowUp } from "@larp/shared";
-import { BellRing, Check, Copy } from "lucide-react";
-import { useState } from "react";
+// Chunk 5 · After the event: who's due a text, then every conversation grouped by event.
+// Named people get follow-ups (promises + draft); unnamed chats stay as notes until you say who it was.
+import { api, type Conversation, type FollowUp } from "@larp/shared";
+import { BellRing } from "lucide-react";
 import { Button, ButtonLink, firstName, Pending, SectionLabel, Title } from "../../components/ui";
 import { call } from "../../lib/api";
 import { useApi } from "../../lib/useApi";
 import { paths } from "../../routes";
+import { FollowUpCard } from "./FollowUpCard";
+import { NotesCard } from "./NotesCard";
+import { announceChange, conversationsOf, isDue } from "./shared";
 
 export function FollowUpsPage() {
-  const followUps = useApi(api.listFollowUps);
-  const list = followUps.data ?? [];
+  const followUps = useApi(api.listFollowUps, undefined, (l) => l.some((f) => f.notesStatus === "pending"));
+  const convs = useApi(api.listConversations, undefined, (l) => l.some((c) => c.notes?.status === "pending"));
+  const events = useApi(api.listEvents);
 
+  const reload = () => {
+    void followUps.reload();
+    void convs.reload();
+    announceChange();
+  };
   const weekLater = async () => {
     await call(api.runNudges);
-    void followUps.reload();
+    reload();
   };
 
+  if (followUps.loading || convs.loading) return <Pending>Remembering who you met…</Pending>;
+  const fs = followUps.data ?? [];
+  const cs = convs.data ?? [];
+  const groups = groupByEvent(fs, cs, (id) => events.data?.find((e) => e.id === id)?.name);
+
   return (
-    <div className="space-y-8">
-      <Title sub="Who you met, what you promised, and the message to send. You just hit send.">Follow-ups</Title>
-      {followUps.loading && <Pending>Remembering who you met…</Pending>}
-      {!followUps.loading && list.length === 0 && (
+    <div className="space-y-10">
+      <Title sub="Who you met, what you promised, and the texts you'd never send on your own. You just hit send.">Follow-ups</Title>
+      {groups.length === 0 ? (
         <div className="space-y-4 border border-dashed border-line p-5">
           <p className="text-[16px] text-pretty">Nobody yet. Talk to someone and the follow-ups write themselves.</p>
           <ButtonLink to={paths.live()} variant="secondary">
             Go live
           </ButtonLink>
         </div>
-      )}
-      <ul className="space-y-10">
-        {list.map((f) => (
-          <li key={f.id}>
-            <FollowUpItem followUp={f} />
-          </li>
-        ))}
-      </ul>
-      {list.length > 0 && (
-        <Button variant="ghost" className="w-full" onClick={weekLater}>
-          Skip to a week later
-        </Button>
+      ) : (
+        <>
+          <DueNow followUps={fs.filter(isDue)} />
+          {groups.map((g) => (
+            <section key={g.key} className="space-y-6">
+              <h2 className="border-b border-line pb-2 font-serif text-[1.35rem] italic text-muted">{g.name}</h2>
+              <ul className="space-y-10">
+                {g.open.map((f) => (
+                  <li key={f.id}>
+                    <FollowUpCard followUp={f} conversations={conversationsOf(f, cs)} onChange={reload} />
+                  </li>
+                ))}
+                {g.notes.map((c) => (
+                  <li key={c.id}>
+                    <NotesCard conversation={c} onChange={reload} />
+                  </li>
+                ))}
+                {g.done.map((f) => (
+                  <li key={f.id}>
+                    <FollowUpCard followUp={f} conversations={conversationsOf(f, cs)} onChange={reload} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+          <Button variant="ghost" className="w-full" onClick={weekLater}>
+            Skip to a week later
+          </Button>
+        </>
       )}
     </div>
   );
 }
 
-function FollowUpItem({ followUp: f }: { followUp: FollowUp }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    await navigator.clipboard.writeText(f.draft);
-    setCopied(true);
-  };
-
+/** The nudge: "you told Sam you'd send the deck", one tap from the drafted text. */
+function DueNow({ followUps }: { followUps: FollowUp[] }) {
+  if (!followUps.length) return null;
   return (
-    <article className="space-y-4">
-      {f.status === "nudged" && (
-        <p className="flex items-center gap-2 text-[14px] font-semibold text-live">
+    <section className="space-y-3 border border-live/60 p-4" data-testid="due-now">
+      <SectionLabel>
+        <span className="flex items-center gap-2 text-live">
           <BellRing size={16} strokeWidth={2} aria-hidden />
-          It's been a week. Don't ghost {firstName(f.personName)}.
-        </p>
-      )}
-      <h2 className="font-serif text-[1.9rem] leading-[1.05]">{f.personName}</h2>
-      {f.summary && <p className="text-[15px] leading-relaxed text-muted text-pretty">{f.summary}</p>}
-      {f.promises.length > 0 && (
-        <div className="space-y-2">
-          <SectionLabel>You promised</SectionLabel>
-          <ul className="space-y-1.5">
-            {f.promises.map((p) => (
-              <li key={p} className="text-[16px]">
-                {p}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <div className="space-y-3 border border-line bg-surface p-4">
-        <p className="text-[15px] leading-relaxed whitespace-pre-line">{f.draft}</p>
-        <Button variant="secondary" className="w-full" onClick={copy}>
-          {copied ? <Check size={18} aria-hidden /> : <Copy size={18} strokeWidth={1.75} aria-hidden />}
-          {copied ? "Copied. Go send it" : "Copy message"}
-        </Button>
-      </div>
-    </article>
+          It's been a week. Don't ghost them.
+        </span>
+      </SectionLabel>
+      <ul className="space-y-3">
+        {followUps.map((f) => (
+          <li key={f.id}>
+            <a href={`#f-${f.id}`} className="block font-serif text-[1.35rem] leading-[1.2] text-pretty">
+              {f.promises[0]
+                ? `You told ${firstName(f.personName)} you'd ${f.promises[0]}.`
+                : `Text ${firstName(f.personName)} before they forget your face.`}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
+}
+
+interface Group {
+  key: string;
+  name: string;
+  open: FollowUp[];
+  notes: Conversation[];
+  done: FollowUp[];
+  latest: number;
+}
+
+/** Newest event first; inside it, people to text, then unnamed chats, then the ones already sent. */
+function groupByEvent(fs: FollowUp[], cs: Conversation[], eventName: (id: string) => string | undefined): Group[] {
+  const groups = new Map<string, Group>();
+  const group = (eventId: string | undefined, at: number) => {
+    const key = eventId ?? "none";
+    const g = groups.get(key) ?? { key, name: (eventId && eventName(eventId)) || "Off the record", open: [], notes: [], done: [], latest: 0 };
+    g.latest = Math.max(g.latest, at);
+    groups.set(key, g);
+    return g;
+  };
+  const claimed = new Set(fs.flatMap((f) => conversationsOf(f, cs).map((c) => c.id)));
+  for (const f of [...fs].sort((a, b) => a.dueAt - b.dueAt)) {
+    const at = conversationsOf(f, cs)[0]?.startedAt ?? 0;
+    group(f.eventId, at)[f.status === "done" ? "done" : "open"].push(f);
+  }
+  for (const c of [...cs].sort((a, b) => b.startedAt - a.startedAt)) {
+    if (!claimed.has(c.id)) group(c.eventId, c.startedAt).notes.push(c);
+  }
+  return [...groups.values()].sort((a, b) => b.latest - a.latest);
 }

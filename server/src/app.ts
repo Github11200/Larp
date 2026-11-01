@@ -12,7 +12,8 @@ import { profileRoutes } from "./modules/profile/routes";
 
 export function createApp() {
   const app = express();
-  app.use(cors({ origin: env.webOrigins ?? true }));
+  // Our own Render static site is always allowed, so a typo in WEB_ORIGIN can't take the whole demo down.
+  app.use(cors({ origin: env.webOrigins ? [...env.webOrigins, /^https:\/\/larp-web[\w-]*\.onrender\.com$/] : true }));
   app.use(express.json({ limit: "5mb" }));
 
   app.get("/health", (_req, res) => void res.json({ ok: true }));

@@ -1,6 +1,7 @@
 // Chunk 6 · Phone-first shell: content + bottom tab bar with "Go live" always one tap away.
 import { CalendarDays, Inbox, Mic, User, Users } from "lucide-react";
 import { Link, NavLink, Outlet, useLocation } from "react-router";
+import { NudgeBadge } from "../features/followups/NudgeBadge";
 import { paths } from "../routes";
 
 /** `also`: other screens that live under the tab (an event's person belongs to Events). */
@@ -25,11 +26,12 @@ export function Layout() {
             to={to}
             end
             className={({ isActive }) =>
-              `flex flex-1 flex-col items-center justify-center gap-1 text-[11px] font-medium ${isActive || also.some((p) => pathname.startsWith(p)) ? "text-fg" : "text-muted"}`
+              `relative flex flex-1 flex-col items-center justify-center gap-1 text-[11px] font-medium ${isActive || also.some((p) => pathname.startsWith(p)) ? "text-fg" : "text-muted"}`
             }
           >
             <Icon size={22} strokeWidth={1.75} aria-hidden />
             {label}
+            {to === paths.followUps() && <NudgeBadge />}
           </NavLink>
         ))}
         <Link to={paths.live()} className="ml-2 flex items-center gap-2 bg-accent px-4 text-[15px] font-semibold text-bg active:opacity-75">
