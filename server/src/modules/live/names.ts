@@ -5,12 +5,16 @@ import type { Person } from "@larp/shared";
 
 // A cue phrase that introduces or greets someone, optionally "my friend", then their name.
 const CUE_LEAD =
-  "\\b(?:i'?m|i am|my name is|my name's|name's|call me|this is|meet|say hi to|hey|hi|hello|yo|thanks|thank you|nice to meet you|good to meet you|great to meet you)\\s*,?\\s+(?:my\\s+(?:friend|cofounder|co-founder|colleague|coworker|teammate|boss|partner|roommate|manager)\\s*,?\\s+)?";
-// The name is captured by lookahead (not consumed) so "hi, I'm Sam" still sees "I'm Sam".
+  "\\b(i'?m|i am|my name is|my name's|name's|call me|this is|meet|say hi to|hey|hi|hello|yo|thanks|thank you|nice to meet you|good to meet you|great to meet you)\\s*,?\\s+(?:my\\s+(?:friend|cofounder|co-founder|colleague|coworker|teammate|boss|partner|roommate|manager)\\s*,?\\s+)?";
+// Group 1 is the cue; the name (group 2) is captured by lookahead (not consumed) so "hi, I'm Sam" still sees "I'm Sam".
 const CUE = new RegExp(`${CUE_LEAD}(?=([a-z][a-z'-]*))`, "gi");
 /** Text ending in a cue, i.e. the next word is probably a name. */
 const ENDS_IN_CUE = new RegExp(`${CUE_LEAD}$`, "i");
 const LAST_NAME = /^\s+([A-Z][a-z]+)\b/;
+/** The speaker naming themselves. Said by the user, the name is theirs (often misheard), never someone new. */
+const SELF_CUE = /^(i'?m|i am|my name is|my name's|name's|call me)$/i;
+/** Bare greetings name whoever's addressed, but also catch noise ("hey Siri", "thanks Google"): attendees only. */
+const GREETING_CUE = /^(hey|hi|hello|yo|thanks|thank you)$/i;
 
 /** Words that follow a cue but aren't names ("I'm good", "hey everyone", "this is great"). */
 const NOT_NAMES = new Set(
@@ -35,20 +39,21 @@ export interface CaughtName {
  * Names introduced in a line, matched against attendees. A lowercase word only counts if it matches
  * an attendee (typed lines are often lowercase); otherwise it must look like a name (Capitalized).
  * `ignore` is the user's own name and project names, so "I'm Nonit" or "this is Larp" add nobody.
+ * `byMe`: the user said the line, so "I'm X" is them (misheard), not a new person.
  */
-export function catchNames(text: string, attendees: Person[], ignore: string[] = []): CaughtName[] {
+export function catchNames(text: string, attendees: Person[], ignore: string[] = [], { byMe = false } = {}): CaughtName[] {
   const skip = new Set([...NOT_NAMES, ...ignore.flatMap((s) => norm(s).split(" "))]);
   const line = text.replace(/[\u2018\u2019]/g, "'");
   const out: CaughtName[] = [];
   for (const m of line.matchAll(CUE)) {
-    const first = m[1];
-    if (first.length < 2 || skip.has(first.toLowerCase())) continue;
+    const [, cue, first] = m;
+    if (first.length < 2 || skip.has(first.toLowerCase()) || (byMe && SELF_CUE.test(cue))) continue;
     const after = line.slice(m.index + m[0].length + first.length);
     const last = LAST_NAME.exec(after)?.[1];
     const full = last && !skip.has(last.toLowerCase()) ? `${first} ${last}` : first;
     const person = matchAttendee(full, attendees);
     if (person) out.push({ name: person.name, person });
-    else if (/^[A-Z][a-z]/.test(first)) out.push({ name: full });
+    else if (/^[A-Z][a-z]/.test(first) && !GREETING_CUE.test(cue)) out.push({ name: full });
   }
   return dedupe(out);
 }
@@ -69,6 +74,19 @@ function sameName(a: string, b: string): boolean {
   const [short, long] = x.length <= y.length ? [x, y] : [y, x];
   if (short.length >= 3 && long.startsWith(short)) return true; // nicknames: Sam/Samantha, Mati/Matias
   return short.length >= 4 && editDistance(x, y) <= 1; // STT spelling: Pria/Priya
+}
+
+/**
+ * Looser than an attendee match: could one first name be a mishearing of the other ("Junaid" for "Jinay")?
+ * Same first letter, and one's consonant sounds start the other's. Used to stop one person becoming two.
+ */
+export function soundsAlike(a: string, b: string): boolean {
+  const [x, y] = [norm(firstOf(a)), norm(firstOf(b))];
+  if (sameName(x, y)) return true;
+  if (!x || !y || x[0] !== y[0]) return false;
+  const [kx, ky] = [soundKey(x), soundKey(y)];
+  const [short, long] = kx.length <= ky.length ? [kx, ky] : [ky, kx];
+  return short.length >= 2 && long.startsWith(short);
 }
 
 const firstOf = (name: string) => name.trim().split(/\s+/)[0] ?? "";

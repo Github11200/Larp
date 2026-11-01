@@ -70,13 +70,13 @@ function pitch(frame: Int16Array, sampleRate: number): number | undefined {
   return best < YIN_UNVOICED ? sampleRate / bestLag : undefined;
 }
 
-// Tolerances, kept wide on purpose: a line's median pitch swings ~25% with intonation (questions rise),
-// so only clear cases are judged here and the rest are left to the transcript.
-const SAME_PITCH = 0.12;
+// Loudness leads: the phone is close to the user, so others land clearly quieter (prod: user ~-21dB, others -27 to -34).
+// Pitch only breaks ties: voices of the same range overlap and a line's pitch swings ~25% with intonation.
+const SAME_PITCH = 0.2;
 const OTHER_PITCH = 0.35;
 /** Same voice within this loudness; this much quieter means farther from the phone, i.e. not the user. */
-const SAME_DB = 4;
-const QUIETER_DB = 8;
+const SAME_DB = 3;
+const QUIETER_DB = 6;
 /** Lines of the user's voice needed before judging others against it. */
 const MIN_SAMPLES = 1;
 
@@ -84,8 +84,9 @@ const MIN_SAMPLES = 1;
 export class SelfVoice {
   private samples: Voice[] = [];
 
+  /** A sample that's clearly someone else's is refused: one bad line would mislabel the rest of the chat. */
   learn(v: Voice | undefined): void {
-    if (v) this.samples.push(v);
+    if (v && this.judge(v) !== "them") this.samples.push(v);
   }
 
   /** "me" / "them" when the voice clearly matches or doesn't; undefined leaves it to the transcript. */
@@ -97,7 +98,7 @@ export class SelfVoice {
     const drift = hz && v.pitchHz ? Math.abs(v.pitchHz - hz) / hz : undefined;
     if (drift !== undefined && drift > OTHER_PITCH) return "them";
     if (v.db < db - QUIETER_DB) return "them";
-    if (drift !== undefined && drift < SAME_PITCH && v.db >= db - SAME_DB) return "me";
+    if (v.db >= db - SAME_DB && (drift === undefined || drift < SAME_PITCH)) return "me";
     return undefined;
   }
 }

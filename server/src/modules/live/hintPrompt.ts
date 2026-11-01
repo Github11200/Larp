@@ -34,6 +34,7 @@ export function buildSystem(ctx: Pick<LiveContext, "profile" | "people" | "event
     "questions about the user's work, or things only the user would say about the user's projects, tell you who is talking.",
     "A ? line can run two speakers together (a question, then the user starting to answer).",
     "The user says your hints out loud, so a line that resembles a hint you gave is ME, even if a name in it is misheard.",
+    "Names in the transcript are often misheard: one that sounds like a person above (Junaid for Jinay) is that person, not someone new.",
     "",
     "Reply with exactly two lines and nothing else:",
     "Line 1: who said the LAST line: me or them (or none if told so). If it mixes both, whoever asked the question in it.",

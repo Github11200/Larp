@@ -115,11 +115,14 @@ async function unfinishedHint(ctx: LiveContext, st: HintState): Promise<void> {
   }
 }
 
-/** Asks for a hint and whispers it, unless a hint from a newer request already went out. `urgent` (a question) skips the cooldown. */
+/**
+ * Asks for a hint and whispers it, unless a hint from a newer request already went out. `urgent` (a question) skips the cooldown.
+ * When the coach judges the user said the line, it stays quiet: otherwise it answers the user's own questions.
+ */
 async function askHint(ctx: LiveContext, st: HintState, prompt: string, urgent: boolean): Promise<ReturnType<typeof parseReply>> {
   const req = ++st.req;
   const reply = parseReply(await ask(ctx, prompt));
-  if (reply.hint && req > st.spokenReq && claim(st, urgent)) {
+  if (reply.hint && reply.speaker !== "me" && req > st.spokenReq && claim(st, urgent)) {
     st.spokenReq = req;
     await ctx.whisper(reply.hint);
   }

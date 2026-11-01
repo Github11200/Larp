@@ -6,7 +6,7 @@ import { db } from "../src/lib/db";
 import { seedDemo } from "../src/lib/seed";
 import { listeners } from "../src/listeners";
 import { hintsListener } from "../src/modules/live/hints";
-import { catchNames } from "../src/modules/live/names";
+import { catchNames, soundsAlike } from "../src/modules/live/names";
 import { LiveSession, sessionFor, STOP_WAIT_MS, type LiveListener, type Transport } from "../src/modules/live/session";
 
 vi.mock("../src/lib/llm", () => ({ llmAvailable: false, async *streamText() {} }));
@@ -47,6 +47,33 @@ test("catchNames: intros, friends, greetings; fuzzy attendee match; skips non-na
   expect(names("I'm good, this is great, hey everyone")).toEqual([]);
   expect(names("I'm Alex and this is Larp")).toEqual([]);
   expect(names("i'm working on something new")).toEqual([]);
+});
+
+test("catchNames guards: your own 'I'm X' is you; bare greetings only catch attendees", () => {
+  const names = (text: string, byMe = false) => catchNames(text, demoPeople, ["Alex Rivera"], { byMe }).map((c) => c.name);
+  expect(names("Hey, I'm Anand. I build AI tools.", true)).toEqual([]); // misheard self-intro
+  expect(names("I'm Mati", false)).toEqual(["Mati"]);
+  expect(names("Hey Siri, thanks Google")).toEqual([]);
+  expect(names("hey priya")).toEqual(["Priya Patel"]);
+  expect(names("Nice to meet you, Quinn")).toEqual(["Quinn"]);
+});
+
+test("soundsAlike: a misheard name isn't a new person; different names are", () => {
+  expect(soundsAlike("Junaid", "Jinay")).toBe(true);
+  expect(soundsAlike("Jinae", "Jinay")).toBe(true);
+  expect(soundsAlike("Sara", "Sam")).toBe(false);
+  expect(soundsAlike("Lena", "Mati")).toBe(false);
+});
+
+test("a stranger whose name sounds like someone already here isn't added twice", async () => {
+  const userId = await newUser();
+  const r = recorder();
+  const s = new LiveSession(userId, r.transport, listeners);
+  await s.handle({ type: "start" });
+  await s.handle({ type: "say", speaker: "them", text: "Hi, I'm Jinay." });
+  await s.handle({ type: "say", speaker: "them", text: "Yeah, I'm Junaid, nice to meet you." });
+  await s.stop();
+  expect(s.conversation.participants).toEqual([{ name: "Jinay" }]);
 });
 
 test("1:1 with a stranger: a caught name becomes a participant; general openers until then", async () => {

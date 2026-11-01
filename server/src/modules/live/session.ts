@@ -15,7 +15,7 @@ import type {
   Voice,
 } from "@larp/shared";
 import { db, newId } from "../../lib/db";
-import { catchNames, matchAttendee, nameFixer } from "./names";
+import { catchNames, matchAttendee, nameFixer, soundsAlike } from "./names";
 import { openersFor } from "./openers";
 import { openStt, sttAvailable, type SttStream } from "./stt";
 import { synthesize } from "./tts";
@@ -347,11 +347,20 @@ export class LiveSession implements LiveContext {
   }
 
   /** Names said out loud join the conversation; a matching attendee brings their dossier. */
-  private async catchNames(text: string): Promise<void> {
+  private async catchNames(text: string, byMe: boolean): Promise<void> {
     const ignore = [this.profile?.name ?? "", ...(this.profile?.projects.map((p) => p.name) ?? [])];
     const attendees = await this.attendees();
-    for (const c of catchNames(text, attendees, ignore)) await this.welcome(c.person ?? null, c.name);
+    for (const c of catchNames(text, attendees, ignore, { byMe })) {
+      if (!c.person && this.isKnownVoice(c.name)) continue;
+      await this.welcome(c.person ?? null, c.name);
+    }
     this.learnNames(attendees);
+  }
+
+  /** A stranger's name that's probably a mishearing of the user's or someone already here: adding it would split one person in two. */
+  private isKnownVoice(name: string): boolean {
+    const here = [this.profile?.name, ...this.conversation.participants.map((p) => p.name)];
+    return here.some((n) => n && soundsAlike(name, n));
   }
 
   /** Dossiers still cooking when the chat started may be ready now. */
@@ -383,15 +392,17 @@ export class LiveSession implements LiveContext {
     const text = this.fixNames(raw);
     const hints = this.conversation.hints;
     if (speaker === "unknown" && isEchoOfHint(text, hints)) return; // the mic heard the coach
-    const sayingHint = speaker === "unknown" && repeatsHint(text, hints);
+    const self = selfVoiceOf(this.userId);
+    // Words alone can mislead (they echo the hint's topic), so a voice that's clearly someone else's vetoes it.
+    const sayingHint = speaker === "unknown" && repeatsHint(text, hints) && self.judge(voice) !== "them";
     const u: Utterance = { speaker: sayingHint ? "me" : speaker, text, at: Date.now(), ...(voice && { voice }) };
-    if (sayingHint) selfVoiceOf(this.userId).learn(voice); // certainly the user: learn their voice
-    else if (speaker === "unknown") u.speaker = selfVoiceOf(this.userId).judge(voice) ?? "unknown";
+    if (sayingHint) self.learn(voice); // certainly the user: learn their voice
+    else if (speaker === "unknown") u.speaker = self.judge(voice) ?? "unknown";
     this.conversation.transcript.push(u);
     this.send({ type: "transcript", speaker: u.speaker, text, final: true, id: this.lineId(u) });
     if (this.started) void this.save(); // snapshot: a server restart mid-chat can resume from here
     try {
-      if (!sayingHint) await this.catchNames(text); // a misheard "I'm Nonit" in a hint must not add a stranger
+      if (!sayingHint) await this.catchNames(text, u.speaker === "me"); // a misheard "I'm Nonit" in a hint must not add a stranger
       await this.refreshPending();
     } catch (e) {
       console.error("[live] names", e); // knowing who's there is a bonus; never lose the line over it
@@ -435,14 +446,25 @@ const words = (s: string) => s.toLowerCase().match(/[a-z0-9']+/g) ?? [];
 const echoWindowMs = (hint: string) => 2500 + 350 * words(hint).length;
 /** How long after a whisper the user might still be saying it. */
 const REPEAT_WINDOW_MS = 30_000;
-/** Shorter lines ("what's your name?") match hints by chance. */
-const REPEAT_MIN_WORDS = 5;
+/** Lines with fewer distinctive words ("what's your name?") match hints by chance. */
+const REPEAT_MIN_WORDS = 3;
+const REPEAT_OVERLAP = 0.6;
 
 /** Share of a line's words that came from the hint. */
 function overlap(said: string[], hint: string): number {
   const hinted = new Set(words(hint));
   return said.filter((w) => hinted.has(w)).length / said.length;
 }
+
+/** Words everyone says; sharing them with a hint ("I'm working on...") says nothing about who's talking. */
+const FILLER = new Set(
+  (
+    "i i'm im me my you you're your we our they them it it's a an the and or but so to of on in at for with about " +
+    "is are was were be am do does did have has what what's how who where when why that this there yeah yes no oh " +
+    "hey hi um uh like just really so working work doing building build up right now"
+  ).split(" "),
+);
+const contentWords = (s: string) => words(s).filter((w) => !FILLER.has(w));
 
 /** On a speaker (not earbuds) the mic picks up the whisper; such lines are mostly a recent hint's words. */
 export function isEchoOfHint(text: string, hints: Hint[], now = Date.now()): boolean {
@@ -453,7 +475,7 @@ export function isEchoOfHint(text: string, hints: Hint[], now = Date.now()): boo
 
 /** The user saying a hint out loud, as they're coached to. Lets the transcript credit them instead of the other person. */
 export function repeatsHint(text: string, hints: Hint[], now = Date.now()): boolean {
-  const said = words(text);
+  const said = contentWords(text);
   if (said.length < REPEAT_MIN_WORDS) return false;
-  return hints.some((h) => now - h.at <= REPEAT_WINDOW_MS && overlap(said, h.text) >= 0.5);
+  return hints.some((h) => now - h.at <= REPEAT_WINDOW_MS && overlap(said, h.text) >= REPEAT_OVERLAP);
 }

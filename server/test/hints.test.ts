@@ -84,6 +84,17 @@ test("a question mid-line is hinted before the line finishes, and not again when
   expect(llm.prompts).toHaveLength(2);
 });
 
+test("the coach stays quiet when it judges the user asked the question (prod: it answered 'Teaching what?')", async () => {
+  llm.replies.push({ text: "me\nI teach robotics basics, mostly to kids", delayMs: 0 }, { text: "me\nRight now I'm building clinical AI", delayMs: 0 });
+  const { s, hints } = await session();
+  hintsListener.onPartial!(s, "Teaching. Teaching what?", "unknown");
+  await vi.waitFor(() => expect(llm.prompts).toHaveLength(1));
+  await s.handle({ type: "say", speaker: "unknown", text: "So what are you up to right now?" });
+  await s.stop();
+  expect(hints()).toEqual([]);
+  expect(s.conversation.transcript[0].speaker).toBe("me");
+});
+
 test("parseReply tolerates model noise", () => {
   expect(parseReply("them\nAsk about their tennis app")).toEqual({ speaker: "them", hint: "Ask about their tennis app" });
   expect(parseReply("Me.\n-")).toEqual({ speaker: "me", hint: undefined });
@@ -106,6 +117,12 @@ test("a line that repeats a recent hint is the user saying it, even with a mishe
   expect(repeatsHint("What's your name?", hints, 8000)).toBe(false); // too short to tell
   expect(repeatsHint("I'm building voice agents for dental clinics.", hints, 8000)).toBe(false);
   expect(repeatsHint("Hey, I'm Anand. I build AI tools for doctors.", hints, 60_000)).toBe(false); // too long ago
+});
+
+test("sharing filler words with a hint isn't saying it (prod: the other person's 'I'm working on building robots')", () => {
+  const hints = [{ id: "h", text: "You were saying you're working on something, Junaid? Jinay, what about you?", at: 0 }];
+  expect(repeatsHint("I'm working on building robots.", hints, 8000)).toBe(false);
+  expect(repeatsHint("I'm working on robot, robot", hints, 8000)).toBe(false);
 });
 
 test("saying a hint aloud is credited to you: no hint for it, and no stranger caught from it", async () => {
