@@ -19,7 +19,7 @@ import { catchNames, matchAttendee, nameFixer, soundsAlike } from "./names";
 import { openersFor } from "./openers";
 import { openStt, sttAvailable, type SttStream } from "./stt";
 import { synthesize } from "./tts";
-import { SelfVoice } from "./voice";
+import { SpeakerVoices } from "./voice";
 
 export interface LiveContext {
   readonly userId: string;
@@ -87,8 +87,8 @@ export class LiveSession implements LiveContext {
   people: Person[] = [];
   event: Event | null = null;
   conversation: Conversation = { id: newId(), startedAt: Date.now(), transcript: [], hints: [], linksShared: [], participants: [] };
-  /** The user's voice, learned fresh each conversation: loudness depends on where the phone sits this time. */
-  private selfVoice = new SelfVoice();
+  /** Who's speaking by voice, learned fresh each conversation: loudness depends on where the phone sits this time. */
+  private voices = new SpeakerVoices();
   private stt: SttStream | null = null;
   private started = false;
   private ended = false;
@@ -176,6 +176,7 @@ export class LiveSession implements LiveContext {
 
   setSpeaker(u: Utterance, speaker: Speaker): void {
     u.speaker = speaker; // u is the transcript entry itself, so the saved conversation sees it
+    if (speaker === "them") this.voices.learnThem(u.voice); // the LLM's (or nudge's) call teaches the others' voice
     this.send({ type: "transcript", speaker, text: u.text, final: true, id: this.lineId(u) });
   }
 
@@ -403,12 +404,13 @@ export class LiveSession implements LiveContext {
     const text = this.fixNames(raw);
     const hints = this.conversation.hints;
     if (speaker === "unknown" && isEchoOfHint(text, hints)) return; // the mic heard the coach
-    const self = this.selfVoice;
+    const self = this.voices;
     // Words alone can mislead (they echo the hint's topic), so a voice that's clearly someone else's vetoes it.
     const sayingHint = speaker === "unknown" && repeatsHint(text, hints) && !self.rejects(voice);
     const u: Utterance = { speaker: sayingHint ? "me" : speaker, text, at: Date.now(), ...(voice && { voice }) };
-    if (sayingHint) self.learn(voice); // certainly the user: learn their voice
+    if (sayingHint) self.learnMe(voice); // certainly the user: learn their voice
     else if (speaker === "unknown") u.speaker = self.judge(voice) ?? "unknown";
+    if (!sayingHint && u.speaker === "them") self.learnThem(voice);
     this.conversation.transcript.push(u);
     this.send({ type: "transcript", speaker: u.speaker, text, final: true, id: this.lineId(u) });
     if (this.started) void this.save(); // snapshot: a server restart mid-chat can resume from here

@@ -70,54 +70,108 @@ function pitch(frame: Int16Array, sampleRate: number): number | undefined {
   return best < YIN_UNVOICED ? sampleRate / bestLag : undefined;
 }
 
-// Loudness leads: the phone is close to the user, so others land clearly quieter (prod: user ~-21dB, others -27 to -34).
-// Pitch only breaks ties: voices of the same range overlap and a line's pitch swings ~25% with intonation.
-const SAME_PITCH = 0.2;
-const OTHER_PITCH = 0.35;
-/** Same voice within this loudness; this much quieter means farther from the phone, i.e. not the user. */
-const SAME_DB = 3;
-const QUIETER_DB = 6;
-/** Lines of the user's voice needed before judging others against it. */
-const MIN_SAMPLES = 1;
-/** Until this many, the voiceprint may be off (one stray sample), so it labels but never overrules or refuses. */
-const TRUSTED_SAMPLES = 3;
-/** Recent samples only, so the voiceprint follows the phone as it moves. */
+// Two voices, nearest wins: the user's (from hint read-backs) and everyone else's (from lines the LLM or a clear voice called "them").
+// At a table the two are only ~3-5dB and ~10% pitch apart (prod), so fixed thresholds fail; the boundary sits between
+// the two voices as heard in this conversation. Tuned offline on 36 prod lines (35 right, none wrong by voice).
+
+/** How much one voice wobbles line to line: in dB, and in log pitch (~12%). Distances are in these units. */
+const DB_SCALE = 2.5;
+const PITCH_SCALE = 0.12;
+/** Closer calls than this are left to the LLM. */
+const MARGIN = 0.5;
+/** Only very clear voice calls feed back into the model, so one bad label can't snowball. */
+const SELF_TRAIN = 1.5;
+/** Read-backs run quieter than the user's normal talk, so their voice is centred on its louder lines. */
+const ME_LOUDNESS_QUANTILE = 0.75;
+/** Recent samples only, so the model follows the phone as it moves. */
 const MAX_SAMPLES = 8;
+/** Before the others' voice is known: this much quieter than the user is someone else; this close (with pitch agreeing) is the user. */
+const QUIETER_DB = 6;
+const SAME_DB = 2;
+const SAME_PITCH = 0.15;
+/** User samples needed before the voice may overrule what the words say (a read-back). */
+const TRUSTED_SAMPLES = 3;
 
-/** The user's voice, learned during a conversation from lines known to be theirs. */
-export class SelfVoice {
-  private samples: Voice[] = [];
+interface Centre {
+  db: number;
+  lnHz?: number;
+}
 
-  /** Once trusted, a sample that's clearly someone else's is refused: one bad line would mislabel the rest of the chat. */
-  learn(v: Voice | undefined): void {
-    if (!v || this.rejects(v)) return;
-    this.samples.push(v);
-    if (this.samples.length > MAX_SAMPLES) this.samples.shift();
+/** Who said a line, by voice, learned fresh each conversation. */
+export class SpeakerVoices {
+  private me: Voice[] = [];
+  private them: Voice[] = [];
+  /** Loudest line so far: before any read-back, the phone is nearest the user. */
+  private loudest = -Infinity;
+
+  /** A line known to be the user's (they said a hint aloud), unless the voice is clearly someone else's. */
+  learnMe(v: Voice | undefined): void {
+    if (v && !this.rejects(v)) push(this.me, v);
   }
 
-  /** Clearly not the user, by a voiceprint built from enough lines to overrule what the words suggest. */
+  /** A line the LLM (or the user's nudge) says was someone else's; refused when the voice clearly says it's the user's. */
+  learnThem(v: Voice | undefined): void {
+    if (v && this.judge(v, false) !== "me") push(this.them, v);
+  }
+
+  /** Clearly not the user, by enough samples to overrule a read-back match. */
   rejects(v: Voice | undefined): boolean {
-    return this.samples.length >= TRUSTED_SAMPLES && this.judge(v) === "them";
+    return Boolean(v) && this.me.length >= TRUSTED_SAMPLES && this.judge(v, false) === "them" && (this.score(v!) ?? 0) < -2 * MARGIN;
   }
 
-  /** "me" / "them" when the voice clearly matches or doesn't; undefined leaves it to the transcript. */
-  judge(v: Voice | undefined): Exclude<Speaker, "unknown"> | undefined {
-    if (!v || this.samples.length < MIN_SAMPLES) return undefined;
-    const db = median(this.samples.map((s) => s.db));
-    const hzs = this.samples.flatMap((s) => (s.pitchHz ? [s.pitchHz] : []));
-    const hz = hzs.length ? median(hzs) : undefined;
-    const drift = hz && v.pitchHz ? Math.abs(v.pitchHz - hz) / hz : undefined;
-    if (drift !== undefined && drift > OTHER_PITCH) return "them";
-    if (v.db < db - QUIETER_DB) return "them";
-    if (drift !== undefined && drift < SAME_PITCH && v.db >= db - SAME_DB) return "me"; // a close-by partner can be as loud: pitch must agree
+  /** "me" / "them" when the voice is clear; undefined leaves it to the LLM. `observe`: a real new line, so it may teach the model. */
+  judge(v: Voice | undefined, observe = true): Exclude<Speaker, "unknown"> | undefined {
+    if (!v) return undefined;
+    const loudest = this.loudest;
+    if (observe) this.loudest = Math.max(loudest, v.db);
+    if (!this.me.length) return v.db < loudest - QUIETER_DB ? "them" : undefined;
+    const s = this.score(v);
+    const out = s === undefined ? this.judgeOneVoice(v) : s > MARGIN ? "me" : s < -MARGIN ? "them" : undefined;
+    if (observe && out && s !== undefined && Math.abs(s) >= SELF_TRAIN) push(out === "me" ? this.me : this.them, v);
+    return out;
+  }
+
+  /** Only the user's voice known yet: just the clear cases. */
+  private judgeOneVoice(v: Voice): Exclude<Speaker, "unknown"> | undefined {
+    const m = centre(this.me, ME_LOUDNESS_QUANTILE)!;
+    const drift = m.lnHz !== undefined && v.pitchHz ? Math.abs(Math.log(v.pitchHz) - m.lnHz) : undefined;
+    if (v.db < m.db - QUIETER_DB) return "them";
+    if (v.db >= m.db - SAME_DB && drift !== undefined && drift < SAME_PITCH) return "me";
     return undefined;
   }
+
+  /** >0 nearer the user's voice, <0 nearer the others'; undefined until both are known. */
+  private score(v: Voice): number | undefined {
+    const m = centre(this.me, ME_LOUDNESS_QUANTILE);
+    const t = centre(this.them);
+    return m && t ? distance(v, t) - distance(v, m) : undefined;
+  }
 }
 
-function median(xs: number[]): number {
-  const s = [...xs].sort((a, b) => a - b);
-  const m = s.length >> 1;
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+function push(samples: Voice[], v: Voice): void {
+  samples.push(v);
+  if (samples.length > MAX_SAMPLES) samples.shift();
 }
+
+function centre(vs: Voice[], loudnessQuantile = 0.5): Centre | undefined {
+  if (!vs.length) return undefined;
+  const lnHz = vs.flatMap((v) => (v.pitchHz ? [Math.log(v.pitchHz)] : []));
+  return { db: quantile(vs.map((v) => v.db), loudnessQuantile), lnHz: lnHz.length ? median(lnHz) : undefined };
+}
+
+function distance(v: Voice, c: Centre): number {
+  const db = (v.db - c.db) / DB_SCALE;
+  const pitch = v.pitchHz && c.lnHz !== undefined ? (Math.log(v.pitchHz) - c.lnHz) / PITCH_SCALE : 0;
+  return Math.hypot(db, pitch);
+}
+
+function quantile(xs: number[], q: number): number {
+  const s = [...xs].sort((a, b) => a - b);
+  const i = (s.length - 1) * q;
+  const lo = Math.floor(i);
+  return s[lo] + (s[Math.ceil(i)] - s[lo]) * (i - lo);
+}
+
+const median = (xs: number[]) => quantile(xs, 0.5);
 
 const round = (x: number) => Math.round(x * 10) / 10;
