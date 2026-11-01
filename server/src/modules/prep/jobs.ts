@@ -7,6 +7,7 @@ import { askJson, llmAvailable } from "../../lib/llm";
 import { linkContacts } from "../contacts/contacts";
 import { findHuman } from "../contacts/identity";
 import { cached } from "./cache";
+import { demoBrief, demoGuests, pinDemoRanks } from "./demo";
 import { neutral, RESPECT } from "./prompts";
 import { rankGuests } from "./rank";
 import { researchPerson } from "./research";
@@ -29,12 +30,13 @@ export async function prepEvent(input: { userId: string; eventId: string; guestL
 
     // Each source is optional: a flaky one shrinks the list instead of failing the whole prep.
     const shots = await readScreenshots(input.screenshots ?? []).catch(degrade("screenshots", [] as Guest[]));
-    const guests = dedupe([...page.guests, ...shots, ...parseGuestList(input.guestList)]);
+    const guests = dedupe([...page.guests, ...shots, ...parseGuestList(input.guestList), ...demoGuests(event.url)]);
     if (!guests.length) throw new PrepError(unreadable ?? emptyMessage(input, page));
     // Link first so people met at earlier events are ranked with what we already know about them.
     const people = await linkContacts(userId, mergePeople(await peopleAt(userId, eventId), guests, eventId));
     const fresh = people.slice(0, guests.length);
-    const ranks = await rankGuests(fresh, await db.profiles.get(userId, "me"), updated).catch(degrade("rank", fresh.map(() => ({}))));
+    const ranked = await rankGuests(fresh, await db.profiles.get(userId, "me"), updated).catch(degrade("rank", fresh.map(() => ({}))));
+    const ranks = pinDemoRanks(event.url, fresh, ranked);
     for (const [i, p] of people.entries()) await db.people.put(userId, { ...p, ...ranks[i] });
     await db.events.update(userId, eventId, (e) => ({ ...e, status: "ready", error: undefined }));
   } catch (e) {
@@ -104,7 +106,7 @@ async function writeDossier(userId: string, person: Person, fresh?: boolean): Pr
   const me = profile
     ? `${profile.name}: ${profile.headline}. ${profile.summary}\nSkills: ${profile.skills.join(", ")}\nProjects: ${profile.projects.map((p) => `${p.name} (${p.description})`).join("; ")}`
     : "unknown";
-  const them = `${person.name}${person.headline ? `: ${person.headline}` : ""}\nLinks: ${person.links.join(", ") || "none"}`;
+  const them = `${person.name}${person.headline ? `: ${person.headline}` : ""}\nLinks: ${person.links.join(", ") || "none"}\n${demoBrief(event?.url, person.name)}`.trim();
   const prompt =
     `I'm about to meet someone at "${event?.name ?? "an event"}". Brief me like a hype-man who did their homework.\n\n` +
     `Me: ${me}\n\nThem: ${them}\n\nWeb search results (may include other people with the same name; ignore those):\n${research || "none"}\n\n` +
