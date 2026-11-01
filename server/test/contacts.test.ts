@@ -1,4 +1,5 @@
 // Contacts layer + prep robustness: one human across events, re-prep keeps dossiers, bad links fail loudly.
+// Test
 import { existsSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { type AddressInfo } from "node:net";
