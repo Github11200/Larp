@@ -47,6 +47,8 @@ export function buildSystem(ctx: Pick<LiveContext, "profile" | "people" | "event
     "You may end with a short question back. If you don't know the topic well, still give a sensible honest take.",
     "Use the user's profile only when it fits what was asked; don't pitch their work out of nowhere.",
     "When nobody asked anything, hint only if the user seems stuck: one natural thing to say, ideally a callback to something THEM said.",
+    "Short reactions or side remarks (hey, I am, wait what) usually need no hint: -.",
+    "Once the user has introduced themselves (or you hinted an intro), never suggest introducing them again; move the chat forward.",
     "If ME said the last line, line 2 is -. Exception: ME only stalled (um, good question, yeah so) after a question; then answer it.",
     "Refer to other people by name or they/them; never guess gender.",
     "If you know little about THEM, keep it human: what they're working on, common ground, or (if unknown) their name.",

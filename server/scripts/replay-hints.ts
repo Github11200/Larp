@@ -6,7 +6,7 @@ import { z } from "zod";
 import { env } from "../src/env";
 import { streamText } from "../src/lib/llm";
 import { buildSystem, parseReply, turnPrompt } from "../src/modules/live/hintPrompt";
-import type { LiveContext } from "../src/modules/live/session";
+import { repeatsHint, type LiveContext } from "../src/modules/live/session";
 
 const [api, user, ...models] = process.argv.slice(2);
 if (!api || !user) throw new Error("usage: replay-hints.ts <api-url> <user-id> [model ...]");
@@ -29,6 +29,8 @@ for (const model of models.length ? models : [env.llmFastModel]) {
     );
     const ctx = { profile, people, event: null, conversation: c } as unknown as LiveContext;
     console.log(`\n=== ${c.participants.map((p) => p.name).join(", ") || "stranger"}`);
+    // Relabel as the live session now would: the user saying a hint aloud is ME.
+    for (const u of c.transcript) if (u.speaker !== "me" && repeatsHint(u.text, c.hints, u.at)) u.speaker = "me";
     for (const [i, u] of c.transcript.entries()) {
       console.log(`  ${u.speaker.toUpperCase().padEnd(7)} ${u.text}`);
       if (u.speaker === "me") continue;
