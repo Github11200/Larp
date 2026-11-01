@@ -24,7 +24,10 @@ services:
         source: /*
         destination: /index.html
     envVars:
-      - key: VITE_API_URL # public URL of larp-api, e.g. https://larp-api.onrender.com
+      # Public URL of larp-api (copy it from larp-api's dashboard page), e.g. https://larp-api.onrender.com.
+      # Baked in at build time: set it, then redeploy larp-web. The build fails on purpose if it's blank.
+      # Render can't inject another service's public URL here (fromService only gives private hostnames).
+      - key: VITE_API_URL
         sync: false
 
   # REST API + live WebSocket. Paid plan: free instances sleep, and a cold start would kill the live demo.
@@ -42,7 +45,9 @@ services:
         fromDatabase: { name: larp-db, property: connectionString }
       - key: REDIS_URL
         fromService: { type: keyvalue, name: larp-kv, property: connectionString }
-      - key: WEB_ORIGIN # public URL of larp-web, for CORS
+      # Public URL of larp-web, for CORS (comma-separate extras, e.g. a custom domain). Trailing slash/caps are fine;
+      # https://larp-web*.onrender.com is always allowed, and blank allows any origin.
+      - key: WEB_ORIGIN
         sync: false
 
   # Event + people prep, profile building: slow jobs off the request path.
