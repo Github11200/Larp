@@ -9,4 +9,4 @@ npm install --silent
 export DATABASE_URL= REDIS_URL=
 log=$(mktemp)
 npm test 2>&1 | grep -E "Test Files|Tests |FAIL" || true
-if npm run typecheck >"$log" 2>&1; then echo "typecheck ok"; else grep -E "error TS" /tmp/larp-typecheck.log; echo "TYPECHECK FAILED"; exit 1; fi
+if npm run typecheck >"$log" 2>&1; then echo "typecheck ok"; else grep -E "error TS" "$log"; echo "TYPECHECK FAILED"; exit 1; fi
