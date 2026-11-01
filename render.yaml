@@ -1,0 +1,84 @@
+# Render Blueprint: the whole product in one file. Render dashboard → New → Blueprint → pick this repo.
+# Secrets are `sync: false`: Render asks for them on first deploy; they never live in git.
+# Everything in one region (Ohio) so the API ↔ DB ↔ Key Value hops stay fast.
+
+envVarGroups:
+  - name: larp-secrets
+    envVars:
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      # Add LLM provider keys here once chosen.
+
+services:
+  # Phone web app, served from Render's CDN.
+  - type: web
+    name: larp-web
+    runtime: static
+    buildCommand: npm ci && npm run build -w web
+    staticPublishPath: web/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL # public URL of larp-api, e.g. https://larp-api.onrender.com
+        sync: false
+
+  # REST API + live WebSocket. Paid plan: free instances sleep, and a cold start would kill the live demo.
+  - type: web
+    name: larp-api
+    runtime: node
+    region: ohio
+    plan: starter
+    buildCommand: npm ci
+    startCommand: npm run start -w server
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: larp-secrets
+      - key: DATABASE_URL
+        fromDatabase: { name: larp-db, property: connectionString }
+      - key: REDIS_URL
+        fromService: { type: keyvalue, name: larp-kv, property: connectionString }
+      - key: WEB_ORIGIN # public URL of larp-web, for CORS
+        sync: false
+
+  # Event + people prep, profile building: slow jobs off the request path.
+  - type: worker
+    name: larp-worker
+    runtime: node
+    region: ohio
+    plan: starter
+    buildCommand: npm ci
+    startCommand: npm run worker -w server
+    envVars:
+      - fromGroup: larp-secrets
+      - key: DATABASE_URL
+        fromDatabase: { name: larp-db, property: connectionString }
+      - key: REDIS_URL
+        fromService: { type: keyvalue, name: larp-kv, property: connectionString }
+
+  # "You told Sam you'd send the deck." Hourly follow-up nudges.
+  - type: cron
+    name: larp-nudges
+    runtime: node
+    region: ohio
+    plan: starter
+    schedule: "0 * * * *"
+    buildCommand: npm ci
+    startCommand: npm run nudge -w server
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: { name: larp-db, property: connectionString }
+
+  # Job queue for the worker. noeviction: queued jobs must never be dropped.
+  - type: keyvalue
+    name: larp-kv
+    region: ohio
+    plan: free
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
+
+databases:
+  - name: larp-db
+    region: ohio
+    plan: free

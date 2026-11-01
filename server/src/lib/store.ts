@@ -37,7 +37,7 @@ function memoryStore(): DocStore {
 }
 
 function postgresStore(url: string): DocStore {
-  const sql = postgres(url, { ssl: url.includes("localhost") ? false : "require", max: 5 });
+  const sql = postgres(url, { ssl: "prefer", max: 5 }); // Render internal URLs may skip TLS; external ones need it
   const ready = sql`
     create table if not exists docs (
       user_id text not null,

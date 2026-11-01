@@ -76,3 +76,14 @@ For multi-step tasks, state a brief plan:
 ```
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+## Team integration (read `docs/integration.md` first)
+
+Several people and agents build chunks of `plan.md` in parallel. To keep them snapping together:
+
+1. Work inside your chunk's folders (ownership table in `docs/integration.md`). Outside them, only add one-liners to the shared glue files.
+2. Chunks connect only through `shared/` contracts: models, `api` routes, live protocol, `LiveListener`, jobs. Contract changes are additive-only and go in their own commit.
+3. Keep stubs working: the app must run with no API keys, no DB, and no Redis. Degrade gracefully when a key is missing.
+4. Live path: no network or `await` in `onPartial`; slow work goes in prep jobs.
+5. LLM calls go through `server/src/lib/llm.ts` only (provider-agnostic; don't hardcode a vendor elsewhere).
+6. Before merging to `main` (auto-deploys to Render): `npm test && npm run typecheck`, plus `node scripts/ui-smoke.mjs` if web changed.
