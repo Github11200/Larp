@@ -163,7 +163,37 @@ Target: the first time a user hears their cloned voice is **within 60 seconds** 
 
 ---
 
-## 9. Build plan (about 12 hours of core work)
+## 9. Research backing
+
+### Line for the stage (safe to say)
+> "Role Swap is built on **role reversal**, which a 25-study meta-analysis found to be one of the two most effective psychodrama techniques. It's also built on VR research where people **counselled themselves by switching into another person's body**. We do it with just your voice: no headset, no therapist."
+
+### The research
+| # | Finding | Why it matters for us | Source |
+|---|---|---|---|
+| 1 | **Role reversal works.** A meta-analysis of 25 experimental studies (1965–1999) found a large overall effect, with role reversal and doubling as the most effective techniques. | Our core mechanic | Kipper & Ritchie (2003), *Group Dynamics* 7(1):13–25 · [summary in Orkibi & Feniger-Schaal 2019](https://pmc.ncbi.nlm.nih.gov/articles/PMC6380607) |
+| 2 | **Swapping bodies to counsel yourself.** Participants alternated between a virtual body that looked like them (describing a problem) and a Freud avatar (advising themselves). Mood improved more when they spoke as Freud than when they spoke as themselves. A 2019 follow-up found self-conversation felt more helpful than scripted counselling. | The closest research match to Role Swap: you talk to yourself from inside someone else | [Osimo, Pizarro, Spanlang & Slater (2015), *Scientific Reports*](https://pmc.ncbi.nlm.nih.gov/articles/PMC4564809) · [Slater et al. (2019), *Scientific Reports*](https://pmc.ncbi.nlm.nih.gov/articles/PMC6662659) |
+| 3 | **Perspective-taking changes how you see the other person.** Taking another person's perspective reduced stereotyping and increased how much people saw themselves in the other person. | Playing dad makes him feel less like a villain | [Galinsky & Moskowitz (2000), *JPSP* 78:708–724](https://prejudicereduction.princeton.edu/publications/perspective-taking-decreasing-stereotype-expression-stereotype-accessibility-and-group) |
+| 4 | **Self-distancing lowers emotional reactivity.** Looking at your situation as an outsider reduced emotional and cardiovascular reactivity and rumination. | Hearing your words from the outside is distance built into the product | [Ayduk & Kross (2010), *JPSP*](https://pmc.ncbi.nlm.nih.gov/articles/PMC2881638/) · [Kross & Ayduk (2009), *JRP*](https://rascl.studentorg.berkeley.edu/assets/files/kross_ayduk_2009_jrp.pdf) |
+| 5 | **Your own cloned voice is uniquely persuasive.** Voice agents using a clone of the participant's own voice earned significantly more trust, even when they were disclosed as AI. | Why it must be *your* voice and not a stock voice. It's also why the consent step matters | [Schanke, Burtch & Ray, "Digital Lyrebirds," *Management Science*](https://pubsonline.informs.org/doi/epdf/10.1287/mnsc.2022.03316) |
+| 6 | **Practice beats no practice.** A Cochrane review (76 studies, 10,124 students) found communication-skills training improved skills compared with usual curricula. | Rehearsing hard conversations is an established training method | [Cochrane review (2021), PubMed 33559127](https://pubmed.ncbi.nlm.nih.gov/33559127/) |
+
+### Do NOT say on stage
+- "Clinically proven" or "therapy." None of this research tested *our* app.
+- A specific effect size for Kipper & Ritchie. Sources disagree, and we haven't read the full paper.
+- "Psychodrama" as the headline. Say "role reversal" or "a technique therapists use."
+
+### Honest caveats (have these ready for Q&A)
+- The psychodrama studies are old (pre-2000), and later reviewers criticised how they were reported.
+- The Freud studies used VR full-body embodiment. We use voice only, so we're borrowing the *mechanism*, not proving the result.
+- Self-distancing research mostly covers reflecting on *past* events, in lab samples.
+- The voice-clone trust effect came from a single study design (investment games), and it can work in both directions. That's why consent and deleting the voice matter.
+
+**Honest framing if asked "is it proven?":** "The technique is evidence-based. Our app is a new way to deliver it, and we tested it on N hackers today."
+
+---
+
+## 10. Build plan (about 12 hours of core work)
 | Block | Work | Done when |
 |---|---|---|
 | 0–1h | Scaffold, deploy to Render, ElevenLabs keys | Hello-world is live on Render |
