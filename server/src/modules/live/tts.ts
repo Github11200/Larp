@@ -1,11 +1,15 @@
 // Chunk 1 · Text-to-speech for whispers. Yields WHISPER_AUDIO chunks as soon as they're generated.
 import { env } from "../../env";
 
+/** A whisper is a few seconds of audio; a stream still going after this is stuck. */
+const TTS_TIMEOUT_MS = 8000;
+
 export async function* synthesize(text: string): AsyncGenerator<Uint8Array> {
   if (!env.elevenLabsKey) return; // no key: hints still show on screen, just silent
   const url = `https://api.elevenlabs.io/v1/text-to-speech/${env.elevenLabsVoiceId}/stream?output_format=pcm_24000`;
   const res = await fetch(url, {
     method: "POST",
+    signal: AbortSignal.timeout(TTS_TIMEOUT_MS),
     headers: { "xi-api-key": env.elevenLabsKey, "content-type": "application/json" },
     body: JSON.stringify({ text, model_id: "eleven_flash_v2_5" }),
   });

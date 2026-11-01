@@ -125,7 +125,8 @@ function groupByEvent(fs: FollowUp[], cs: Conversation[], eventName: (id: string
     group(f.eventId, at)[f.status === "done" ? "done" : "open"].push(f);
   }
   for (const c of [...cs].sort((a, b) => b.startedAt - a.startedAt)) {
-    if (!claimed.has(c.id)) group(c.eventId, c.startedAt).notes.push(c);
+    // Notes exist only once a chat ends; live mode also saves chats still in progress.
+    if (!claimed.has(c.id) && c.notes) group(c.eventId, c.startedAt).notes.push(c);
   }
   return [...groups.values()].sort((a, b) => b.latest - a.latest);
 }

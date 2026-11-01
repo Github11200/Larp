@@ -52,7 +52,7 @@ function Picker({ event }: { event: Event }) {
       back={paths.setup("event")}
       actions={
         <>
-          <Button onClick={() => finish(paths.live())}>
+          <Button onClick={() => finish(paths.live([...chosen][0]))}>
             Go live{chosen.size ? ` with ${chosen.size} dossier${chosen.size > 1 ? "s" : ""} cooking` : ""}
           </Button>
           <Button variant="secondary" onClick={() => finish(paths.home())}>

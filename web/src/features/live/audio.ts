@@ -1,18 +1,25 @@
 // Chunk 1 · Browser audio: mic -> MIC_AUDIO PCM chunks, and WHISPER_AUDIO PCM chunks -> earbud.
+// One AudioContext for both, created inside the Start tap: iOS Safari only lets a gesture unlock audio,
+// and runs it at the hardware rate, so the worklet resamples to 16kHz itself.
 import { MIC_AUDIO, WHISPER_AUDIO } from "@larp/shared";
 
 /** ~100ms per chunk: small enough for fast partials, big enough not to flood the socket. */
 const CHUNK_SAMPLES = MIC_AUDIO.sampleRate / 10;
 
-// Runs on the audio thread: float samples -> 16-bit PCM, posted in CHUNK_SAMPLES batches.
+// Runs on the audio thread: averages hardware-rate samples down to 16kHz (a cheap low-pass), as 16-bit PCM.
 const WORKLET = `
 class Pcm extends AudioWorkletProcessor {
+  ratio = sampleRate / ${MIC_AUDIO.sampleRate}; t = 0; acc = 0; cnt = 0;
   buf = new Int16Array(${CHUNK_SAMPLES}); n = 0;
   process([input]) {
     const ch = input[0];
     if (!ch) return true;
     for (let i = 0; i < ch.length; i++) {
-      const s = Math.max(-1, Math.min(1, ch[i]));
+      this.acc += ch[i]; this.cnt++; this.t++;
+      if (this.t < this.ratio) continue;
+      this.t -= this.ratio;
+      const s = Math.max(-1, Math.min(1, this.acc / this.cnt));
+      this.acc = 0; this.cnt = 0;
       this.buf[this.n++] = s < 0 ? s * 0x8000 : s * 0x7fff;
       if (this.n === this.buf.length) { this.port.postMessage(this.buf.buffer, [this.buf.buffer]); this.buf = new Int16Array(${CHUNK_SAMPLES}); this.n = 0; }
     }
@@ -21,47 +28,64 @@ class Pcm extends AudioWorkletProcessor {
 }
 registerProcessor("pcm", Pcm);`;
 
-/** Starts the mic and calls onChunk with raw PCM. Returns a function that stops it. */
-export async function startMic(onChunk: (pcm: ArrayBuffer) => void): Promise<() => void> {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-  });
-  // The browser resamples the mic to the context rate, so no resampling code needed.
-  const ctx = new AudioContext({ sampleRate: MIC_AUDIO.sampleRate });
-  await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: "text/javascript" })));
-  const node = new AudioWorkletNode(ctx, "pcm");
-  node.port.onmessage = (e) => onChunk(e.data as ArrayBuffer);
-  ctx.createMediaStreamSource(stream).connect(node);
-  await ctx.resume();
-  return () => {
-    stream.getTracks().forEach((t) => t.stop());
-    void ctx.close();
-  };
-}
-
-/** Plays streamed whisper audio gaplessly. A new hint cuts off the previous one. */
-export class WhisperPlayer {
-  private ctx = new AudioContext();
+export class LiveAudio {
+  private ctx: AudioContext | null = null;
+  private micStarted = false;
+  private stopMic?: () => void;
   private sources: AudioBufferSourceNode[] = [];
   private endsAt = 0;
 
+  /**
+   * Call synchronously from the Start tap. Unlocks playback, then asks for the mic.
+   * Safe to tap twice: a second call never opens a second mic. Throws if the mic is refused.
+   */
+  async start(onChunk: (pcm: ArrayBuffer) => void): Promise<void> {
+    const ctx = this.unlock();
+    if (this.micStarted) return;
+    this.micStarted = true;
+    // Asked before any await, so it still counts as part of the tap.
+    const streamP = navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+    try {
+      const stream = await streamP;
+      await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: "text/javascript" })));
+      if (this.ctx !== ctx) return stream.getTracks().forEach((t) => t.stop()); // closed while asking
+      const node = new AudioWorkletNode(ctx, "pcm");
+      node.port.onmessage = (e) => onChunk(e.data as ArrayBuffer);
+      const src = ctx.createMediaStreamSource(stream);
+      src.connect(node);
+      node.connect(ctx.destination); // outputs silence; Safari only runs nodes that reach the destination
+      this.stopMic = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        src.disconnect();
+        node.disconnect();
+      };
+    } catch (e) {
+      this.micStarted = false; // let them try again after fixing permissions
+      throw e;
+    }
+  }
+
+  /** Plays streamed whisper audio gaplessly. Before a tap has unlocked audio it tries anyway (desktop allows it). */
   play(chunk: ArrayBuffer): void {
-    void this.ctx.resume();
+    const ctx = this.ctx ?? this.unlock();
     const pcm = new Int16Array(chunk);
-    const buffer = this.ctx.createBuffer(1, pcm.length, WHISPER_AUDIO.sampleRate);
+    const buffer = ctx.createBuffer(1, pcm.length, WHISPER_AUDIO.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < pcm.length; i++) data[i] = pcm[i] / 0x8000;
-    const src = this.ctx.createBufferSource();
+    const src = ctx.createBufferSource();
     src.buffer = buffer;
-    src.connect(this.ctx.destination);
+    src.connect(ctx.destination);
     // A little lead time on the first chunk absorbs network jitter between chunks.
-    const at = Math.max(this.endsAt, this.ctx.currentTime + 0.05);
+    const at = Math.max(this.endsAt, ctx.currentTime + 0.05);
     src.start(at);
     this.endsAt = at + buffer.duration;
     this.sources.push(src);
     src.onended = () => (this.sources = this.sources.filter((s) => s !== src));
   }
 
+  /** A new hint cuts off the previous whisper. */
   cut(): void {
     this.sources.forEach((s) => s.stop());
     this.sources = [];
@@ -69,6 +93,23 @@ export class WhisperPlayer {
   }
 
   close(): void {
-    void this.ctx.close();
+    this.stopMic?.();
+    this.stopMic = undefined;
+    this.micStarted = false;
+    void this.ctx?.close();
+    this.ctx = null;
+  }
+
+  private unlock(): AudioContext {
+    if (!this.ctx) {
+      this.ctx = new AudioContext();
+      // iOS unlocks output by playing something inside the gesture; one silent frame is enough.
+      const blip = this.ctx.createBufferSource();
+      blip.buffer = this.ctx.createBuffer(1, 1, this.ctx.sampleRate);
+      blip.connect(this.ctx.destination);
+      blip.start();
+    }
+    void this.ctx.resume();
+    return this.ctx;
   }
 }

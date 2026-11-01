@@ -26,6 +26,9 @@ const URL_PARAMS = new URLSearchParams({
   language_code: "en",
 });
 
+/** False without an ElevenLabs key: the phone can't be heard, so lines have to be typed. */
+export const sttAvailable = Boolean(env.elevenLabsKey);
+
 /** Returns null when STT is unavailable; the session still works via `say` messages. */
 export function openStt(events: SttEvents): SttStream | null {
   if (!env.elevenLabsKey) return null;

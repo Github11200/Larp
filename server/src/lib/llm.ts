@@ -22,6 +22,8 @@ export interface Ask {
   maxTokens?: number;
   /** Image data URLs (data:image/...;base64,...) sent with the prompt. Needs the "vision" tier. */
   images?: string[];
+  /** Abort a call that's taking too long (e.g. AbortSignal.timeout on the live path). */
+  signal?: AbortSignal;
 }
 
 /** False when no provider key is set; callers should fall back to their stub. */
@@ -64,6 +66,7 @@ async function complete(ask: Ask, defaultTier: ModelTier, stream: boolean, extra
   const messages = [...(ask.system ? [{ role: "system", content: ask.system }] : []), { role: "user", content: user }];
   const res = await fetch(`${BASE_URL}/chat/completions`, {
     method: "POST",
+    signal: ask.signal,
     headers: { authorization: `Bearer ${env.basetenKey}`, "content-type": "application/json" },
     body: JSON.stringify({
       model: { fast: env.llmFastModel, smart: env.llmSmartModel, vision: env.llmVisionModel }[tier],

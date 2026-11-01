@@ -1,102 +1,167 @@
 // Chunk 1 · Client side of a live conversation (protocol in @larp/shared/live).
-import { ServerMsg, type ClientMsg, type Link, type Speaker } from "@larp/shared";
+// The socket reconnects on its own and resumes the same conversation (refresh, blip, back-and-forth);
+// only an explicit stop ends it.
+import { ServerMsg, type ClientMsg, type Link, type Participant, type Speaker } from "@larp/shared";
 import { useEffect, useRef, useState } from "react";
 import { liveUrl } from "../../lib/api";
-import { startMic, WhisperPlayer } from "./audio";
+import { LiveAudio } from "./audio";
 
 export interface Line {
+  id?: string;
   speaker: Speaker;
   text: string;
   final: boolean;
 }
 
+export type LiveStatus = "connecting" | "ready" | "reconnecting" | "ended";
+export type MicState = "off" | "starting" | "on" | "blocked";
+
+/** The conversation this tab is in, so a refresh picks it back up. Per tab, like the conversation. */
+const STORE = "larp.live";
+interface Stored {
+  id: string;
+  /** The ?person it was opened with; opening live for someone else starts a new conversation. */
+  person?: string;
+}
+const readStored = (): Stored | null => {
+  try {
+    return JSON.parse(sessionStorage.getItem(STORE) ?? "null") as Stored | null;
+  } catch {
+    return null;
+  }
+};
+const writeStored = (s: Stored | null) => {
+  try {
+    if (s) sessionStorage.setItem(STORE, JSON.stringify(s));
+    else sessionStorage.removeItem(STORE);
+  } catch {
+    // private mode: refresh just starts a new conversation
+  }
+};
+
 export function useLive(personId?: string) {
   const ws = useRef<WebSocket>(null);
-  const [status, setStatus] = useState<"connecting" | "live" | "ended">("connecting");
+  const audio = useRef<LiveAudio>(null);
+  const onEnded = useRef<() => void>(null);
+  const [status, setStatus] = useState<LiveStatus>("connecting");
+  const [ears, setEars] = useState<boolean>();
+  const [eventId, setEventId] = useState<string>();
   const [lines, setLines] = useState<Line[]>([]);
   const [hint, setHint] = useState<string>();
+  const [openers, setOpeners] = useState<string[]>([]);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [primaryId, setPrimaryId] = useState<string>();
   const [card, setCard] = useState<Link>();
-  const [person, setPerson] = useState<string>();
-  const [mic, setMic] = useState<"off" | "on" | "blocked">("off");
-  const player = useRef<WhisperPlayer>(null);
-  const stopMic = useRef<() => void>(null);
-  const onEnded = useRef<() => void>(null);
+  const [mic, setMic] = useState<MicState>("off");
 
   useEffect(() => {
-    const socket = new WebSocket(liveUrl());
-    socket.binaryType = "arraybuffer";
-    ws.current = socket;
-    player.current = new WhisperPlayer();
-    socket.onopen = () => send({ type: "start", personId });
-    socket.onmessage = (e) => {
-      if (typeof e.data !== "string") return player.current?.play(e.data);
-      const msg = ServerMsg.parse(JSON.parse(e.data));
+    audio.current = new LiveAudio();
+    let closed = false; // this effect is done (unmount or stop); don't reconnect
+    let retry: ReturnType<typeof setTimeout>;
+    let attempt = 0;
+
+    const connect = () => {
+      const socket = new WebSocket(liveUrl());
+      socket.binaryType = "arraybuffer";
+      ws.current = socket;
+      socket.onopen = () => {
+        attempt = 0;
+        const stored = readStored();
+        const resume = stored && stored.person === personId ? stored.id : undefined;
+        send({ type: "start", personId: resume ? undefined : personId, conversationId: resume });
+      };
+      socket.onmessage = (e) => {
+        if (typeof e.data !== "string") return audio.current?.play(e.data);
+        const parsed = ServerMsg.safeParse(safeJson(e.data));
+        if (!parsed.success) return console.warn("[live] unknown message", e.data); // newer server, older page
+        onMessage(parsed.data);
+      };
+      socket.onclose = () => {
+        if (closed || ws.current !== socket) return;
+        setStatus("reconnecting");
+        retry = setTimeout(connect, Math.min(500 * 2 ** attempt++, 5000));
+      };
+    };
+
+    const onMessage = (msg: ServerMsg) => {
       switch (msg.type) {
         case "ready":
-          setStatus("live");
-          return void turnOnMic();
+          writeStored({ id: msg.conversationId, person: personId });
+          setEars(msg.ears ?? true);
+          setEventId(msg.eventId);
+          setLines([]); // the server replays the transcript right after
+          return setStatus("ready");
         case "transcript":
           return setLines((ls) => upsertLine(ls, msg));
         case "hint":
-          player.current?.cut(); // newest hint wins
+          audio.current?.cut(); // newest hint wins
           return setHint(msg.text);
         case "link_card":
           return setCard(msg.link);
-        case "person":
-          return setPerson(msg.name);
+        case "participants":
+          setParticipants(msg.participants);
+          return setPrimaryId(msg.personId);
+        case "openers":
+          return setOpeners(msg.lines);
         case "ended":
+          writeStored(null);
           onEnded.current?.();
           return setStatus("ended");
         case "error":
           return console.warn("[live]", msg.message);
       }
     };
+
+    connect();
     return () => {
-      socket.close();
-      stopMic.current?.();
-      stopMic.current = null;
-      player.current?.close();
+      closed = true;
+      clearTimeout(retry);
+      ws.current?.close(); // the server keeps the conversation for a bit in case we come back
+      ws.current = null;
+      audio.current?.close();
+      setMic("off");
     };
   }, [personId]);
-
-  /** Needs a user gesture on some browsers; if auto-start is refused, the page shows a mic button. */
-  async function turnOnMic() {
-    if (stopMic.current) return;
-    try {
-      const socket = ws.current;
-      const stop = await startMic((pcm) => {
-        // Always stream, even mid-whisper: they may keep talking. The server drops echoes of the coach.
-        if (socket?.readyState !== WebSocket.OPEN) return;
-        socket.send(pcm);
-      });
-      if (ws.current !== socket || socket?.readyState !== WebSocket.OPEN) return stop(); // page left while asking
-      stopMic.current = stop;
-      setMic("on");
-    } catch (e) {
-      console.warn("[live] mic", e);
-      setMic("blocked");
-    }
-  }
 
   function send(msg: ClientMsg) {
     if (ws.current?.readyState === WebSocket.OPEN) ws.current.send(JSON.stringify(msg));
   }
 
+  /** The big Start tap. Must be called straight from the tap handler (iOS audio rules). */
+  function start() {
+    if (mic === "starting" || mic === "on") return;
+    setMic("starting");
+    // Stream to whichever socket is current, so the mic survives reconnects. Mid-whisper too:
+    // they may keep talking; the server drops echoes of the coach.
+    audio.current
+      ?.start((pcm) => ws.current?.readyState === WebSocket.OPEN && ws.current.send(pcm))
+      .then(() => setMic("on"))
+      .catch((e) => {
+        console.warn("[live] mic", e);
+        setMic("blocked");
+      });
+  }
+
   return {
     status,
+    ears,
+    eventId,
     lines,
     hint,
+    openers,
+    participants,
+    primaryId,
     card,
-    person,
     mic,
-    turnOnMic,
+    start,
     dismissCard: () => setCard(undefined),
     say: (speaker: Speaker, text: string) => send({ type: "say", speaker, text }),
-    /** Switch who you're talking to mid-session (their dossier powers the hints). */
-    talkTo: (personId: string) => send({ type: "set_person", personId }),
+    add: (who: { personId?: string; name?: string }) => send({ type: "add_participant", ...who }),
+    remove: (who: { personId?: string; name?: string }) => send({ type: "remove_participant", ...who }),
     /** Resolves once the server has saved the conversation, so follow-ups exist when you look. */
     stop: () =>
       new Promise<void>((resolve) => {
+        writeStored(null);
         onEnded.current = resolve;
         setTimeout(resolve, 3000); // don't strand the user if the socket is gone
         send({ type: "stop" });
@@ -104,9 +169,19 @@ export function useLive(personId?: string) {
   };
 }
 
-/** Partials replace the last in-progress line from the same speaker; finals lock it in. */
+/** Finals with a known id replace that line (speaker fixes); otherwise a final locks in the in-progress line. */
 function upsertLine(lines: Line[], next: Line): Line[] {
+  const i = next.id ? lines.findIndex((l) => l.id === next.id) : -1;
+  if (i >= 0) return lines.map((l, j) => (j === i ? next : l));
   const last = lines.at(-1);
-  if (last && !last.final && last.speaker === next.speaker) return [...lines.slice(0, -1), next];
+  if (last && !last.final) return [...lines.slice(0, -1), next];
   return [...lines, next];
+}
+
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
 }

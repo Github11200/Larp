@@ -1,71 +1,59 @@
 // Chunk 1 · Live mode: the screen you hold during a conversation. Glanceable: the hint is the screen.
-import { api, type Person } from "@larp/shared";
-import { Keyboard, Mic, MicOff, X } from "lucide-react";
+// Covers 1:1 with someone prepped, a stranger, or a whole circle: tap everyone who's there,
+// or just talk and the coach catches names as they're said.
+import { api, type Participant, type Person } from "@larp/shared";
+import { Mic, Plus, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
-import { Button, fieldClass, firstName, Notice } from "../../components/ui";
+import { useNavigate, useSearchParams } from "react-router";
+import { Button, fieldClass, firstName, Notice, Quote } from "../../components/ui";
 import { useApi } from "../../lib/useApi";
 import { paths } from "../../routes";
 import { LinkCard } from "../linkcards/LinkCard";
-import { useLive, type Line } from "./useLive";
+import { useLive, type Line, type LiveStatus, type MicState } from "./useLive";
+import { useWakeLock } from "./useWakeLock";
 
 export function LivePage() {
   const [params] = useSearchParams();
   const live = useLive(params.get("person") ?? undefined);
   const navigate = useNavigate();
+  const noEars = live.ears === false;
   const [typing, setTyping] = useState(false);
+  const started = live.mic === "on" || noEars;
+  useWakeLock(live.status !== "ended" && started);
 
-  const end = async () => {
+  const leave = async (to: string) => {
     await live.stop();
-    navigate(paths.followUps());
+    navigate(to);
   };
-
-  const listening = live.status === "live" && live.mic === "on";
-  const micOff = live.status === "live" && live.mic !== "on";
 
   return (
     <div className="pt-safe pb-safe mx-auto flex h-dvh max-w-md flex-col px-5">
       <header className="flex items-center justify-between py-2">
-        <Link to={paths.home()} aria-label="Leave live mode" className="-ml-2 grid size-11 place-items-center text-muted">
+        <button type="button" aria-label="End and leave live mode" onClick={() => leave(paths.home())} className="-ml-2 grid size-11 place-items-center text-muted">
           <X size={22} strokeWidth={1.75} />
-        </Link>
-        {micOff ? (
-          <button type="button" onClick={live.turnOnMic} className="flex min-h-11 items-center gap-2 px-2 text-[14px] font-medium text-muted underline decoration-line underline-offset-4">
-            <MicOff size={16} strokeWidth={1.75} aria-hidden />
-            Mic off, tap to start
-          </button>
-        ) : (
-          <Status status={live.status} listening={listening} />
-        )}
-        <Button variant="secondary" className="min-h-10 px-4" onClick={end}>
+        </button>
+        <Status status={live.status} mic={live.mic} noEars={noEars} />
+        <Button variant="secondary" className="min-h-10 px-4" onClick={() => leave(paths.followUps())}>
           End
         </Button>
       </header>
 
-      <p className="pt-3 text-[15px] text-muted">
-        Talking to <span className="text-fg">{live.person ?? "someone new"}</span>
-      </p>
+      <Who participants={live.participants} eventId={live.eventId} onAdd={live.add} onRemove={live.remove} />
 
       <main className="flex min-h-0 flex-1 flex-col justify-center gap-8 py-6">
-        {/* A hint always wins; the mic prompt only fills an otherwise empty screen. */}
-        {micOff && !live.hint ? <StartMic blocked={live.mic === "blocked"} onStart={live.turnOnMic} /> : <Hint text={live.hint} />}
+        {live.hint ? <Hint text={live.hint} /> : <SayThis openers={live.openers} listening={live.mic === "on"} />}
+        {!started && live.status !== "connecting" && <StartButton mic={live.mic} resume={live.lines.length > 0} onStart={live.start} />}
+        {noEars && <Notice>No ears on this server (no ElevenLabs key). Type what people say below and the coach still works.</Notice>}
         <Transcript lines={live.lines} />
       </main>
 
-      <footer className="space-y-3 border-t border-line pt-3 pb-2">
-        {typing && <DebugSay onSay={live.say} />}
-        <div className="flex items-center gap-2">
-          <PeopleStrip current={live.person} onPick={live.talkTo} />
-          <button
-            type="button"
-            aria-label="Type instead of talking"
-            aria-pressed={typing}
-            onClick={() => setTyping(!typing)}
-            className={`grid size-11 shrink-0 place-items-center border ${typing ? "border-fg text-fg" : "border-line text-muted"}`}
-          >
-            <Keyboard size={20} strokeWidth={1.75} />
+      <footer className="space-y-2 border-t border-line pt-2 pb-2">
+        {(typing || noEars) && <DebugSay onSay={live.say} />}
+        {!noEars && (
+          <button type="button" aria-pressed={typing} onClick={() => setTyping(!typing)} className="min-h-10 text-[13px] text-muted underline decoration-line underline-offset-4">
+            {typing ? "hide typing" : "demo: type a line"}
           </button>
-        </div>
+        )}
       </footer>
 
       {live.card && <LinkCard link={live.card} onClose={live.dismissCard} />}
@@ -73,49 +61,170 @@ export function LivePage() {
   );
 }
 
-function Status({ status, listening }: { status: "connecting" | "live" | "ended"; listening: boolean }) {
+function Status({ status, mic, noEars }: { status: LiveStatus; mic: MicState; noEars: boolean }) {
+  const listening = status === "ready" && mic === "on";
   const elapsed = useElapsed(listening);
-  const label = status === "connecting" ? "Connecting…" : status === "ended" ? "Ended" : "Listening";
+  const label =
+    status === "connecting"
+      ? "Connecting…"
+      : status === "reconnecting"
+        ? "Reconnecting…"
+        : status === "ended"
+          ? "Saved"
+          : listening
+            ? "live"
+            : noEars
+              ? "typing mode"
+              : "not listening";
   return (
-    <span role="status" className="flex items-center gap-2 text-[14px] font-medium">
-      <span className={`size-2 rounded-full ${listening ? "animate-breathe bg-live" : "bg-muted"}`} aria-hidden />
-      {label}
+    <span role="status" className="flex items-center gap-2 text-[14px] font-semibold tracking-wide">
+      <span
+        aria-hidden
+        className={`size-2.5 rounded-full ${listening ? "animate-breathe bg-danger" : status === "reconnecting" ? "animate-breathe bg-muted" : "bg-muted"}`}
+      />
+      <span className={listening ? "text-danger uppercase" : "text-muted"}>{label}</span>
       {listening && <span className="text-muted tabular-nums">{elapsed}</span>}
     </span>
   );
 }
 
-/** The whisper, set big enough to read at a glance mid-conversation. */
-function Hint({ text }: { text?: string }) {
-  if (!text) {
+/** Who's in the conversation: tap people from the event (several = a group), or add a stranger by name. */
+function Who({
+  participants,
+  eventId,
+  onAdd,
+  onRemove,
+}: {
+  participants: Participant[];
+  eventId?: string;
+  onAdd: (who: { personId?: string; name?: string }) => void;
+  onRemove: (who: { personId?: string; name?: string }) => void;
+}) {
+  const people = useApi(api.listPeople, eventId ? { id: eventId } : undefined); // no event yet: request fails quietly, no chips
+  const attendees = eventId ? prepFirst(people.data ?? []) : [];
+  const unprepped = participants.filter((p) => !p.personId);
+  const isIn = (id: string) => participants.some((p) => p.personId === id);
+  const [naming, setNaming] = useState(false);
+
+  return (
+    <section className="space-y-2 pt-1" aria-label="Who's here">
+      <p className="text-[15px] text-muted">
+        Talking to <span className="text-fg">{talkingTo(participants)}</span>
+      </p>
+      <ul className="-mx-5 flex gap-2 overflow-x-auto px-5 [scrollbar-width:none]">
+        {attendees.map((p) => (
+          <li key={p.id} className="shrink-0">
+            <Chip
+              on={isIn(p.id)}
+              label={firstName(p.name)}
+              onClick={() => (isIn(p.id) ? onRemove({ personId: p.id }) : onAdd({ personId: p.id }))}
+            />
+          </li>
+        ))}
+        {unprepped.map((p) => (
+          <li key={p.name} className="shrink-0">
+            <Chip on label={p.name} onClick={() => onRemove({ name: p.name })} />
+          </li>
+        ))}
+        <li className="shrink-0">
+          {naming ? (
+            <NameInput onDone={(name) => (setNaming(false), name && onAdd({ name }))} />
+          ) : (
+            <button type="button" onClick={() => setNaming(true)} className="flex h-11 items-center gap-1.5 border border-dashed border-line px-4 text-[14px] text-muted">
+              <Plus size={16} strokeWidth={2} aria-hidden />
+              someone new
+            </button>
+          )}
+        </li>
+      </ul>
+    </section>
+  );
+}
+
+const prepFirst = (people: Person[]) => {
+  const prepped = (p: Person) => (p.dossier || p.dossierStatus === "pending" ? 0 : 1);
+  return [...people].sort((a, b) => prepped(a) - prepped(b));
+};
+
+function talkingTo(ps: Participant[]): string {
+  if (ps.length === 0) return "someone new";
+  if (ps.length === 1) return ps[0].name;
+  const names = ps.map((p) => firstName(p.name));
+  return ps.length === 2 ? names.join(" + ") : `${names.slice(0, 2).join(", ")} + ${ps.length - 2}`;
+}
+
+function Chip({ on, label, onClick }: { on: boolean; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onClick}
+      className={`h-11 border px-4 text-[14px] font-medium whitespace-nowrap ${on ? "border-fg bg-fg text-bg" : "border-line text-fg"}`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function NameInput({ onDone }: { onDone: (name: string) => void }) {
+  const [name, setName] = useState("");
+  return (
+    <input
+      autoFocus
+      aria-label="Their name"
+      placeholder="their name"
+      className={`${fieldClass} h-11 w-36 py-0 text-[15px]`}
+      value={name}
+      onChange={(e) => setName(e.target.value)}
+      onKeyDown={(e) => e.key === "Enter" && onDone(name.trim())}
+      onBlur={() => onDone(name.trim())}
+    />
+  );
+}
+
+/** One big tap that unlocks the mic and the earbud together (iOS needs both inside a tap). */
+function StartButton({ mic, resume, onStart }: { mic: MicState; resume: boolean; onStart: () => void }) {
+  return (
+    <div className="space-y-3">
+      {mic === "blocked" && <Notice>Mic is blocked. Allow it for this site in your browser settings, then tap again.</Notice>}
+      <Button className="min-h-16 w-full text-[17px]" onClick={onStart} disabled={mic === "starting"}>
+        <Mic size={20} strokeWidth={2} aria-hidden />
+        {mic === "starting" ? "Asking for the mic…" : mic === "blocked" ? "Try the mic again" : resume ? "Resume listening" : "Start listening"}
+      </Button>
+      <p className="text-center text-[13px] text-muted">Earbud in. Phone in hand. Act natural.</p>
+    </div>
+  );
+}
+
+/** Before the first hint: lines to open with, from the dossier or general ones for strangers. */
+function SayThis({ openers, listening }: { openers: string[]; listening: boolean }) {
+  if (!openers.length) {
     return (
-      <div className="space-y-3">
-        <p data-testid="hint" className="font-serif text-[1.9rem] text-muted italic">
-          Listening…
-        </p>
-        <p className="max-w-[30ch] text-[15px] leading-snug text-muted">
-          When they ask you something or the chat goes quiet, your next line shows up here and in your ear.
-        </p>
-      </div>
+      <p data-testid="hint" className="font-serif text-[1.9rem] text-muted italic">
+        {listening ? "Listening…" : "Who's here?"}
+      </p>
     );
   }
+  return (
+    <section className="space-y-4" aria-label="Say this">
+      <h2 className="text-[13px] font-semibold text-muted">Say this</h2>
+      <ul className="space-y-4">
+        {openers.map((o) => (
+          <li key={o}>
+            <Quote>{o}</Quote>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** The whisper, set big enough to read at a glance mid-conversation. */
+function Hint({ text }: { text: string }) {
   return (
     <p data-testid="hint" key={text} aria-live="polite" className="animate-hand-in font-serif text-[2.6rem] leading-[1.06] tracking-[-0.01em] text-balance">
       {text}
     </p>
-  );
-}
-
-function StartMic({ blocked, onStart }: { blocked: boolean; onStart: () => void }) {
-  return (
-    <div className="space-y-4">
-      <p className="font-serif text-[2.2rem] leading-[1.08] text-balance">Earbud in? Let it listen.</p>
-      {blocked && <Notice>Mic is blocked. Allow it for this site in your browser settings, then tap again.</Notice>}
-      <Button className="min-h-16 w-full text-[17px]" onClick={onStart}>
-        <Mic size={20} strokeWidth={2} aria-hidden />
-        {blocked ? "Try the mic again" : "Start listening"}
-      </Button>
-    </div>
   );
 }
 
@@ -127,7 +236,7 @@ function Transcript({ lines }: { lines: Line[] }) {
     <ul className="space-y-1.5 text-[15px] leading-snug" aria-label="What's been said">
       {recent.map((l, i) => (
         <li
-          key={lines.length - recent.length + i}
+          key={l.id ?? `p${lines.length - recent.length + i}`}
           style={{ opacity: 0.35 + (0.65 * (i + 1)) / recent.length }}
           className={l.speaker === "me" ? "pl-10 text-right text-muted" : "pr-10"}
         >
@@ -135,40 +244,6 @@ function Transcript({ lines }: { lines: Line[] }) {
         </li>
       ))}
     </ul>
-  );
-}
-
-/** Tap who you're talking to so hints use their dossier. */
-function PeopleStrip({ current, onPick }: { current?: string; onPick: (personId: string) => void }) {
-  const events = useApi(api.listEvents);
-  const event = events.data?.at(-1);
-  if (!event) return <div className="flex-1" />;
-  return <EventPeople eventId={event.id} current={current} onPick={onPick} />;
-}
-
-function EventPeople({ eventId, current, onPick }: { eventId: string; current?: string; onPick: (personId: string) => void }) {
-  const people = useApi(api.listPeople, { id: eventId });
-  return (
-    <ul className="flex flex-1 gap-2 overflow-x-auto [scrollbar-width:none]" aria-label="Who are you talking to?">
-      {people.data?.map((p) => (
-        <li key={p.id} className="shrink-0">
-          <PersonChip person={p} on={p.name === current} onPick={() => onPick(p.id)} />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function PersonChip({ person, on, onPick }: { person: Person; on: boolean; onPick: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={onPick}
-      className={`h-11 border px-4 text-[14px] font-medium ${on ? "border-fg bg-fg text-bg" : "border-line text-fg"}`}
-    >
-      {firstName(person.name)}
-    </button>
   );
 }
 
