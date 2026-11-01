@@ -1,7 +1,7 @@
 // Chunk 1 · Prompts for the earpiece coach. Reply format is two lines so it parses without JSON mode:
 //   line 1: who said the last line ("me" / "them" / "none")
 //   line 2: the whisper (max ~8 words) or "-" for silence
-import type { Speaker, Utterance } from "@larp/shared";
+import type { Hint, Speaker, Utterance } from "@larp/shared";
 import type { LiveContext } from "./session";
 
 const HISTORY_LINES = 12;
@@ -50,13 +50,13 @@ export function buildSystem(ctx: LiveContext): string {
   ].join("\n");
 }
 
-export function turnPrompt(transcript: Utterance[]): string {
-  return `Conversation so far:\n${formatTranscript(transcript)}`;
+export function turnPrompt(transcript: Utterance[], hints: Hint[]): string {
+  return context(transcript, hints);
 }
 
-export function stallPrompt(transcript: Utterance[]): string {
+export function stallPrompt(transcript: Utterance[], hints: Hint[]): string {
   return [
-    `Conversation so far:\n${formatTranscript(transcript)}`,
+    context(transcript, hints),
     "",
     "It has gone quiet for several seconds. Line 1: none. Line 2: one hint to restart the conversation.",
   ].join("\n");
@@ -68,6 +68,15 @@ export function parseReply(text: string): { speaker?: Exclude<Speaker, "unknown"
   const speaker = who === "me" ? "me" : who === "them" ? "them" : undefined;
   const hint = rest.join(" ").replace(/^(line 2:|hint:)\s*/i, "").replace(/^["']|["']$/g, "").trim();
   return { speaker, hint: hint && hint !== "-" ? hint : undefined };
+}
+
+/** Past hints are listed so the coach doesn't repeat itself. */
+function context(transcript: Utterance[], hints: Hint[]): string {
+  const given = hints.slice(-3).map((h) => `- ${h.text}`);
+  return [
+    `Conversation so far:\n${formatTranscript(transcript)}`,
+    ...(given.length ? ["", "Hints you already gave (don't repeat them):", ...given] : []),
+  ].join("\n");
 }
 
 const LABEL: Record<Speaker, string> = { me: "ME", them: "THEM", unknown: "?" };
