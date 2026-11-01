@@ -1,10 +1,10 @@
 // Chunk 4 · One person's dossier + jump into live mode with them.
 import { api } from "@larp/shared";
 import { Link, useParams } from "react-router";
+import { Avatar } from "../../components/ui";
 import { call } from "../../lib/api";
 import { useApi } from "../../lib/useApi";
 import { paths } from "../../routes";
-import { Avatar } from "./Avatar";
 
 export function PersonPage() {
   const { id = "" } = useParams();
@@ -20,7 +20,7 @@ export function PersonPage() {
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-4">
-        <Avatar person={p} size={64} />
+        <Avatar name={p.name} photoUrl={p.photoUrl} size="lg" />
         <div className="min-w-0">
           <h1 className="text-2xl font-bold">{p.name}</h1>
           {p.headline && <p className="text-muted">{p.headline}</p>}

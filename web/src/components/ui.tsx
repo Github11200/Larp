@@ -1,5 +1,5 @@
 // Chunk 6 · The building blocks every screen uses, so the whole app speaks one visual language.
-import type { ComponentProps, ReactNode } from "react";
+import { useState, type ComponentProps, type ReactNode } from "react";
 import { Link } from "react-router";
 
 type Variant = "primary" | "secondary" | "ghost";
@@ -53,13 +53,18 @@ export function SectionLabel({ children }: { children: ReactNode }) {
 }
 
 /** Initials in a square, for people without photos. */
-export function Avatar({ name, size = "md" }: { name: string; size?: "md" | "lg" }) {
+/** Event-page photo when there is one; initials when there isn't or it fails to load. */
+export function Avatar({ name, photoUrl, size = "md" }: { name: string; photoUrl?: string; size?: "md" | "lg" }) {
+  const [broken, setBroken] = useState(false);
   const initials = name
     .split(/\s+/)
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase())
     .join("");
   const dims = size === "lg" ? "size-16 text-[1.75rem]" : "size-11 text-[1.15rem]";
+  if (photoUrl && !broken) {
+    return <img src={photoUrl} alt="" onError={() => setBroken(true)} className={`shrink-0 border border-line object-cover ${dims}`} />;
+  }
   return (
     <span aria-hidden className={`grid shrink-0 place-items-center border border-line bg-surface font-serif ${dims}`}>
       {initials}

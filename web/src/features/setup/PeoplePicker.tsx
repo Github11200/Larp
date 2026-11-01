@@ -81,7 +81,7 @@ function Picker({ event }: { event: Event }) {
 function PickRow({ person: p, on, onToggle }: { person: Person; on: boolean; onToggle: () => void }) {
   return (
     <button type="button" role="checkbox" aria-checked={on} onClick={onToggle} className="flex w-full items-start gap-3 py-4 text-left">
-      <Avatar name={p.name} />
+      <Avatar name={p.name} photoUrl={p.photoUrl} />
       <span className="min-w-0 flex-1">
         <span className="block text-[16px] font-semibold">{p.name}</span>
         {p.headline && <span className="block truncate text-[14px] text-muted">{p.headline}</span>}

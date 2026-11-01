@@ -2,10 +2,10 @@
 import { api, type Event, type Person } from "@larp/shared";
 import { useState } from "react";
 import { Link } from "react-router";
+import { Avatar } from "../../components/ui";
 import { call } from "../../lib/api";
 import { useApi } from "../../lib/useApi";
 import { paths } from "../../routes";
-import { Avatar } from "./Avatar";
 import { toDataUrl } from "./images";
 
 export function EventsPage() {
@@ -100,7 +100,7 @@ function People({ event }: { event: Event }) {
 function PersonRow({ person: p }: { person: Person }) {
   return (
     <Link to={paths.person(p.id)} className="flex gap-3 rounded-lg bg-surface p-3">
-      <Avatar person={p} size={44} />
+      <Avatar name={p.name} photoUrl={p.photoUrl} />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
           <span className="truncate font-semibold">
