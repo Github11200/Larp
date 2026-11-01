@@ -80,6 +80,38 @@ console.log(`profile built after ${dropped} dropped polls`);
 if (dropped < 2) fail("didn't drop any polls; test proved nothing");
 await page.screenshot({ path: `${shots}fix-profile-built.png` });
 
+// 4. "Learn me again" with only a hobby keeps the name and skills it already had.
+const nameBefore = await page.locator("h1").first().innerText();
+await page.getByText("Add more about you").click();
+await page.getByPlaceholder(/github.com\/you/).fill("I also go bouldering on weekends");
+await page.getByRole("button", { name: "Learn me again" }).click();
+await page.getByText("Learning you").waitFor();
+await page.getByText("This is what the coach knows about you").waitFor({ timeout: 60000 });
+const body = await page.locator("main, body").first().innerText();
+console.log(`rebuild mentions bouldering: ${/boulder/i.test(body)}, still has HTML skill: ${/\bHTML\b/.test(body)}`);
+const nameAfter = await page.locator("h1").first().innerText();
+console.log(`rebuild: name ${nameBefore} -> ${nameAfter}`);
+if (nameAfter !== nameBefore) fail("rebuild changed the name");
+await page.screenshot({ path: `${shots}fix-profile-rebuilt.png`, fullPage: true });
+
+// 5. Two quick edits (second fired while the first save is still in flight) both stick.
+await page.route("**/api/profile", async (route) => {
+  if (route.request().method() === "PUT") await new Promise((r) => setTimeout(r, 400)); // slow venue wifi
+  await route.fallback();
+});
+await page.getByRole("button", { name: /^Edit headline/ }).click();
+await page.getByRole("textbox", { name: "headline" }).fill("Quick edit one");
+await page.keyboard.press("Enter");
+await page.getByRole("button", { name: /^Edit name/ }).click();
+await page.getByRole("textbox", { name: "name" }).fill("Quick Edit Two");
+await page.keyboard.press("Enter");
+await page.waitForTimeout(2000);
+await page.reload();
+await page.getByText("Quick Edit Two").waitFor();
+const kept = await page.getByText("Quick edit one").count();
+console.log(`quick edits both saved: ${kept > 0}`);
+if (!kept) fail("first quick edit was lost");
+
 await browser.close();
 if (errors.length) fail("browser errors:\n" + errors.join("\n"));
 console.log(process.exitCode ? "fixes check FAILED" : `fixes check ok, screenshots in ${shots}`);
