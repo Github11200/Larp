@@ -73,7 +73,7 @@ async function ask(ctx: LiveContext, prompt: string): Promise<string> {
   const t0 = Date.now();
   let text = "";
   const signal = AbortSignal.timeout(LLM_TIMEOUT_MS);
-  for await (const delta of streamText({ model: "fast", system: buildSystem(ctx), prompt, maxTokens: 40, signal })) text += delta;
+  for await (const delta of streamText({ model: "fast", system: buildSystem(ctx), prompt, maxTokens: 200, signal })) text += delta;
   console.log(`[live:hints] llm ${Date.now() - t0}ms -> ${JSON.stringify(text)}`);
   return text;
 }

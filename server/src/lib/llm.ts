@@ -1,7 +1,7 @@
 // Provider-agnostic LLM helpers shared by all chunks. Feature code calls only these functions,
 // so the provider (and models) can be picked or swapped here without touching any chunk.
 // Add prompts in your own module, not here.
-// Provider: Baseten Model APIs (OpenAI-compatible chat completions).
+// Providers: Baseten Model APIs and OpenAI, both chat-completions shaped. A model id "openai:<id>" picks OpenAI.
 import { z } from "zod";
 import { env } from "../env";
 
@@ -27,21 +27,42 @@ export interface Ask {
 }
 
 /** False when no provider key is set; callers should fall back to their stub. */
-export const llmAvailable = Boolean(env.basetenKey);
+export const llmAvailable = Boolean(env.basetenKey || env.openaiKey);
 
-const BASE_URL = "https://inference.baseten.co/v1";
-/** Baseten's GLM/DeepSeek/Kimi think before answering unless told not to. */
-const NO_THINKING = { chat_template_kwargs: { enable_thinking: false, thinking: false } };
+interface Provider {
+  url: string;
+  key(): string | undefined;
+  /** Provider-specific knobs: token cap name and how to skip thinking (it only burns tokens and latency here). */
+  params(maxTokens: number): object;
+}
+const providers: Record<"baseten" | "openai", Provider> = {
+  baseten: {
+    url: "https://inference.baseten.co/v1/chat/completions",
+    key: () => env.basetenKey,
+    params: (n) => ({ max_tokens: n, chat_template_kwargs: { enable_thinking: false, thinking: false } }),
+  },
+  openai: {
+    url: "https://api.openai.com/v1/chat/completions",
+    key: () => env.openaiKey,
+    params: (n) => ({ max_completion_tokens: n, ...OPENAI_REASONING }),
+  },
+};
+/** Set from scripts/check-openai.sh: the lowest reasoning setting gpt-6.1-terra accepts. */
+const OPENAI_REASONING = { reasoning_effort: "none" };
+
+const modelFor = { fast: () => env.llmFastModel, smart: () => env.llmSmartModel, vision: () => env.llmVisionModel };
+/** Baseten stand-ins for OpenAI tiers, so prep still works through a missing key, rate limit, or outage. */
+const fallbackFor: Partial<Record<ModelTier, () => string>> = { smart: () => env.llmSmartFallback, vision: () => env.llmVisionFallback };
+
+function route(model: string): { provider: Provider; id: string } {
+  return model.startsWith("openai:") ? { provider: providers.openai, id: model.slice(7) } : { provider: providers.baseten, id: model };
+}
 
 /** One call, typed JSON back, validated against the schema. */
 export async function askJson<S extends z.ZodType>(schema: S, ask: Ask): Promise<z.output<S>> {
   const res = await complete(ask, "smart", false, {
-    // Structured extraction doesn't need reasoning; it only burns max_tokens and can truncate the JSON.
-    ...NO_THINKING,
-    response_format: {
-      type: "json_schema",
-      json_schema: { name: "result", schema: z.toJSONSchema(schema), strict: true },
-    },
+    // Not strict: OpenAI's strict mode rejects optional fields; zod validates the result below anyway.
+    response_format: { type: "json_schema", json_schema: { name: "result", schema: z.toJSONSchema(schema), strict: false } },
   });
   const body = (await res.json()) as { choices: { message: { content: string } }[] };
   return schema.parse(JSON.parse(stripFences(body.choices[0].message.content)));
@@ -57,23 +78,36 @@ export async function* streamText(ask: Ask): AsyncGenerator<string> {
   }
 }
 
+/** One request to the tier's model; an OpenAI failure retries once on the tier's Baseten fallback. */
 async function complete(ask: Ask, defaultTier: ModelTier, stream: boolean, extra: object = {}): Promise<Response> {
-  if (!env.basetenKey) throw new Error("LLM provider not configured (set BASETEN_API_KEY)");
   const tier = ask.model ?? defaultTier;
+  const primary = modelFor[tier]();
+  const fallback = route(primary).provider === providers.openai ? fallbackFor[tier]?.() : undefined;
+  try {
+    return await request(primary, tier, ask, stream, extra);
+  } catch (e) {
+    if (!fallback || ask.signal?.aborted) throw e;
+    console.warn(`[llm] ${primary} failed, using ${fallback}: ${(e as Error).message.slice(0, 160)}`);
+    return request(fallback, tier, ask, stream, extra);
+  }
+}
+
+async function request(model: string, tier: ModelTier, ask: Ask, stream: boolean, extra: object): Promise<Response> {
+  const { provider, id } = route(model);
+  const key = provider.key();
+  if (!key) throw new Error(`LLM provider for ${model} not configured`);
   const user = ask.images?.length
     ? [{ type: "text", text: ask.prompt }, ...ask.images.map((url) => ({ type: "image_url", image_url: { url } }))]
     : ask.prompt;
   const messages = [...(ask.system ? [{ role: "system", content: ask.system }] : []), { role: "user", content: user }];
-  const res = await fetch(`${BASE_URL}/chat/completions`, {
+  const res = await fetch(provider.url, {
     method: "POST",
     signal: ask.signal,
-    headers: { authorization: `Bearer ${env.basetenKey}`, "content-type": "application/json" },
+    headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
     body: JSON.stringify({
-      model: { fast: env.llmFastModel, smart: env.llmSmartModel, vision: env.llmVisionModel }[tier],
+      model: id,
       messages,
-      max_tokens: ask.maxTokens ?? (tier === "fast" ? 100 : 2000),
-      // These models think before answering by default; the live path can't wait for that.
-      ...(tier === "fast" && NO_THINKING),
+      ...provider.params(ask.maxTokens ?? (tier === "fast" ? 200 : 2000)),
       stream,
       ...extra,
     }),

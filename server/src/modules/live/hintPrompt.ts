@@ -40,6 +40,7 @@ export function buildSystem(ctx: Pick<LiveContext, "profile" | "people" | "event
     "Give a hint when THEM just asked the user something, or the user seems stuck.",
     "A hint is the core of a strong answer drawn from the user's profile, or a sharp follow-up question,",
     "ideally a callback to something about THEM. Plain words, no quotes, no labels, no bullets, no preamble.",
+    "Refer to other people by name or they/them; never guess gender.",
     "If you know little about THEM, give a solid networking move instead: ask what they're building,",
     "find common ground, or (if their name is unknown) get their name.",
     ...(group ? ["In a group, use names and pull in whoever has been quiet."] : []),

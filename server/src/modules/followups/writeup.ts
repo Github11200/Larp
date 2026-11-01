@@ -35,7 +35,8 @@ Return JSON:
   - theirPromises: things they said they'd do for me, short verb phrases ("intro you to their CTO").
   - learned: up to 3 short facts this person revealed, as plain statements.
   - draft: the follow-up text I'll send when it's due. 2-4 short sentences, casual, sounds like a real person texting, first name only.
-    Deliver on my promise in the message itself ("here's the deck: [link]") and mention one specific thing from the chat.
+    Deliver on my promise in the message itself, pasting the real URL from my links when one fits, and mention one specific thing from the chat.
+    Never write placeholders like [link] or [name]; if no real link fits, say it's coming ("deck's coming your way tonight").
     No "hope this finds you well", no em dashes. Sign off with my first name.
   - dueInDays: when to send it (1 if I promised something "tomorrow", else 2-7).`;
 
@@ -49,7 +50,7 @@ export async function writeUp(
   const fallback = fallbackWriteUp(conv, who, profile, event);
   if (!llmAvailable) return fallback;
   try {
-    const out = await askJson(Out, { model: "fast", system: RULES, prompt: prompt(conv, who, profile, event, open), maxTokens: 1500 });
+    const out = await askJson(Out, { model: "smart", system: RULES, prompt: prompt(conv, who, profile, event, open), maxTokens: 1500 });
     return merge(out, fallback, who);
   } catch (e) {
     console.error("[followups] LLM write-up failed, using fallback", e);
@@ -69,7 +70,8 @@ function merge(out: z.output<typeof Out>, fallback: WriteUp, who: Who[]): WriteU
 }
 
 function prompt(conv: Conversation, who: Who[], profile: Profile | null, event: Event | null, open: FollowUp[]): string {
-  const me = profile ? `${profile.name}: ${profile.headline}. ${profile.summary}` : "unknown";
+  const links = profile?.links.map((l) => `${l.label} ${l.url}`).join(", ");
+  const me = profile ? `${profile.name}: ${profile.headline}. ${profile.summary}${links ? `\nMy links: ${links}` : ""}` : "unknown";
   const people = who.length
     ? who
         .map((w) => {

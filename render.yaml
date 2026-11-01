@@ -9,6 +9,8 @@ envVarGroups:
         sync: false
       - key: BASETEN_API_KEY
         sync: false
+      - key: OPENAI_API_KEY # prep + follow-ups; falls back to Baseten without it
+        sync: false
       - key: EXA_API_KEY # attendee research for dossiers (chunk 4)
         sync: false
 

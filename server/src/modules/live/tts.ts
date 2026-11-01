@@ -11,7 +11,7 @@ export async function* synthesize(text: string): AsyncGenerator<Uint8Array> {
     method: "POST",
     signal: AbortSignal.timeout(TTS_TIMEOUT_MS),
     headers: { "xi-api-key": env.elevenLabsKey, "content-type": "application/json" },
-    body: JSON.stringify({ text, model_id: "eleven_flash_v2_5" }),
+    body: JSON.stringify({ text, model_id: env.elevenLabsTtsModel }),
   });
   if (!res.ok || !res.body) throw new Error(`TTS ${res.status}: ${(await res.text()).slice(0, 200)}`);
   yield* wholeSamples(res.body);

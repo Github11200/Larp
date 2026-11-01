@@ -16,7 +16,13 @@ const cases: Utterance[][] = [
   [line("them", "Hey! So what are you working on?"), line("unknown", "An earpiece that coaches you while you network."), line("unknown", "Oh cool, how do you keep the latency down?")],
   [line("unknown", "I just got back from a climbing trip actually.")],
 ];
-const ctx = { profile: demoProfile, person: demoPeople.find((p) => p.dossier) ?? null } as LiveContext;
+const person = demoPeople.find((p) => p.dossier)!;
+const ctx = {
+  profile: demoProfile,
+  people: [person],
+  event: null,
+  conversation: { participants: [{ name: person.name, personId: person.id }] },
+} as unknown as LiveContext;
 
 for (const model of models) {
   env.llmFastModel = model;
@@ -25,7 +31,7 @@ for (const model of models) {
     let first = 0;
     let text = "";
     try {
-      for await (const d of streamText({ model: "fast", system: buildSystem(ctx), prompt: turnPrompt(transcript, []), maxTokens: 40 })) {
+      for await (const d of streamText({ model: "fast", system: buildSystem(ctx), prompt: turnPrompt(transcript, []), maxTokens: Number(process.env.HINT_MAX_TOKENS ?? 200) })) {
         first ||= Date.now() - t0;
         text += d;
       }
