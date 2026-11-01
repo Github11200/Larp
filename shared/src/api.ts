@@ -131,6 +131,8 @@ export const api = {
 
   // shared · load fixtures for the current user (dev + "try the demo" button)
   seedDemo: route({ method: "POST", path: "/api/dev/seed", res: Ok }),
+  /** Wipe the current user's data for a fresh demo; the profile survives when keepProfile is set. */
+  resetUser: route({ method: "POST", path: "/api/dev/reset", body: z.object({ keepProfile: z.boolean().optional() }), res: Ok }),
 } as const;
 
 /** Fill `:params` in a route path. */
