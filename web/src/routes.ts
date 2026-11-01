@@ -18,5 +18,6 @@ export const paths = {
   contact: (id: string) => `/contacts/${id}`,
   /** Live mode, optionally already talking to someone. */
   live: (personId?: string) => (personId ? `/live?person=${personId}` : "/live"),
-  followUps: () => "/followups",
+  /** `after`: a conversation that just ended, so the page waits for its write-up to land. */
+  followUps: (after?: string) => (after ? `/followups?after=${after}` : "/followups"),
 };

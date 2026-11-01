@@ -46,6 +46,7 @@ export function useLive(personId?: string) {
   const [status, setStatus] = useState<LiveStatus>("connecting");
   const [ears, setEars] = useState<boolean>();
   const [eventId, setEventId] = useState<string>();
+  const [conversationId, setConversationId] = useState<string>();
   const [lines, setLines] = useState<Line[]>([]);
   const [hint, setHint] = useState<string>();
   const [openers, setOpeners] = useState<string[]>([]);
@@ -87,6 +88,7 @@ export function useLive(personId?: string) {
       switch (msg.type) {
         case "ready":
           writeStored({ id: msg.conversationId, person: personId });
+          setConversationId(msg.conversationId);
           setEars(msg.ears ?? true);
           setEventId(msg.eventId);
           setLines([]); // the server replays the transcript right after
@@ -144,6 +146,7 @@ export function useLive(personId?: string) {
 
   return {
     status,
+    conversationId,
     ears,
     eventId,
     lines,

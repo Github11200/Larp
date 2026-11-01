@@ -2,6 +2,8 @@
 // Named people get follow-ups (promises + draft); unnamed chats stay as notes until you say who it was.
 import { api, type Conversation, type FollowUp } from "@larp/shared";
 import { BellRing } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
 import { Button, ButtonLink, firstName, Pending, SectionLabel, Title } from "../../components/ui";
 import { call } from "../../lib/api";
 import { useApi } from "../../lib/useApi";
@@ -12,7 +14,16 @@ import { announceChange, conversationsOf, isDue } from "./shared";
 
 export function FollowUpsPage() {
   const followUps = useApi(api.listFollowUps, undefined, (l) => l.some((f) => f.notesStatus === "pending"));
-  const convs = useApi(api.listConversations, undefined, (l) => l.some((c) => c.notes?.status === "pending"));
+  // End doesn't wait forever for the server, so the chat you just left may land a few seconds after this page opens.
+  const after = useSearchParams()[0].get("after");
+  const [openedAt] = useState(Date.now);
+  const awaiting = (l: Conversation[]) => !!after && !l.find((c) => c.id === after)?.notes && Date.now() - openedAt < 30_000;
+  const convs = useApi(api.listConversations, undefined, (l) => awaiting(l) || l.some((c) => c.notes?.status === "pending"));
+  const landed = !!after && !!convs.data?.find((c) => c.id === after)?.notes;
+  useEffect(() => {
+    if (landed) void followUps.reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [landed]);
   const events = useApi(api.listEvents);
 
   const reload = () => {

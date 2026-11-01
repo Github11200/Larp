@@ -33,7 +33,7 @@ export function LivePage() {
           <X size={22} strokeWidth={1.75} />
         </button>
         <Status status={live.status} mic={live.mic} noEars={noEars} />
-        <Button variant="secondary" className="min-h-10 px-4" onClick={() => leave(paths.followUps())}>
+        <Button variant="secondary" className="min-h-10 px-4" onClick={() => leave(paths.followUps(live.conversationId))}>
           End
         </Button>
       </header>
