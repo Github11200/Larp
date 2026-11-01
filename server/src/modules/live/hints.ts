@@ -7,7 +7,7 @@
 import type { Person, Speaker, Utterance } from "@larp/shared";
 import { llmAvailable, streamText } from "../../lib/llm";
 import type { LiveContext, LiveListener } from "./session";
-import { buildSystem, linesSinceMe, parseReply, stallPrompt, turnPrompt, unfinishedPrompt } from "./hintPrompt";
+import { buildSystem, linesSinceMe, nudgePrompt, parseReply, stallPrompt, turnPrompt, unfinishedPrompt } from "./hintPrompt";
 
 const STALL_MS = 7000;
 /** Back-to-back whispers talk over each other; this keeps at most one per window. */
@@ -96,6 +96,18 @@ export const hintsListener: LiveListener = {
     const urgent = !alreadyHinted && countQuestions(u.text) > 0;
     const reply = await askHint(ctx, st, turnPrompt(ctx.conversation.transcript, ctx.conversation.hints, { joinIn }), urgent);
     if (u.speaker === "unknown" && reply.speaker) ctx.setSpeaker(u, reply.speaker);
+  },
+  async onNudge(ctx) {
+    const st = stateOf(ctx);
+    clearTimeout(st.stallTimer);
+    clearTimeout(st.questionTimer);
+    if (!llmAvailable) {
+      const hint = stubOpener(ctx, st);
+      if (hint) await whisper(ctx, st, hint, true);
+      return;
+    }
+    const reply = await askHint(ctx, st, nudgePrompt(ctx.conversation.transcript, ctx.conversation.hints), true);
+    if (reply.hint) return; // askHint already whispered it
   },
   onEnd(ctx) {
     const st = stateOf(ctx);
