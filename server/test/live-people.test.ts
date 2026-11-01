@@ -1,0 +1,167 @@
+// Live mode beyond "I prepped this one person": strangers, names caught from speech, groups,
+// reconnects that keep the same conversation, and saving that never waits on a stuck call.
+import { demoPeople, type ServerMsg } from "@larp/shared";
+import { expect, test, vi } from "vitest";
+import { db } from "../src/lib/db";
+import { seedDemo } from "../src/lib/seed";
+import { listeners } from "../src/listeners";
+import { hintsListener } from "../src/modules/live/hints";
+import { catchNames } from "../src/modules/live/names";
+import { LiveSession, sessionFor, STOP_WAIT_MS, type LiveListener, type Transport } from "../src/modules/live/session";
+
+vi.mock("../src/lib/llm", () => ({ llmAvailable: false, async *streamText() {} }));
+// Each whisper streams 3 slow audio frames tagged with its text, so overlap is visible.
+vi.mock("../src/modules/live/tts", () => ({
+  async *synthesize(text: string) {
+    for (let i = 0; i < 3; i++) {
+      await new Promise((r) => setTimeout(r, 10));
+      yield new TextEncoder().encode(text);
+    }
+  },
+}));
+
+let n = 0;
+async function newUser() {
+  const userId = `test-people-${n++}`;
+  await seedDemo(userId);
+  return userId;
+}
+
+function recorder() {
+  const sent: (ServerMsg | { type: "audio"; text: string })[] = [];
+  const transport: Transport = {
+    json: (m) => sent.push(m),
+    binary: (c) => sent.push({ type: "audio", text: new TextDecoder().decode(c) }),
+  };
+  const of = <T extends ServerMsg["type"]>(type: T) => sent.filter((m): m is Extract<ServerMsg, { type: T }> => m.type === type);
+  return { sent, transport, of };
+}
+
+test("catchNames: intros, friends, greetings; fuzzy attendee match; skips non-names and yourself", () => {
+  const names = (text: string) => catchNames(text, demoPeople, ["Alex Rivera", "Larp Coach"]).map((c) => `${c.name}${c.person ? "*" : ""}`);
+  expect(names("Hi, I'm Mati")).toEqual(["Mati"]);
+  expect(names("and this is my friend Sara")).toEqual(["Sara"]);
+  expect(names("hey priya, good to see you")).toEqual(["Priya Patel*"]); // lowercase ok when it's an attendee
+  expect(names("Hey Pria!")).toEqual(["Priya Patel*"]); // STT spelling
+  expect(names("Nice to meet you, Sam. I'm Dana Kim")).toEqual(["Sam Chen*", "Dana Kim"]);
+  expect(names("I'm good, this is great, hey everyone")).toEqual([]);
+  expect(names("I'm Alex and this is Larp")).toEqual([]);
+  expect(names("i'm working on something new")).toEqual([]);
+});
+
+test("1:1 with a stranger: a caught name becomes a participant; general openers until then", async () => {
+  const userId = await newUser();
+  const r = recorder();
+  const s = new LiveSession(userId, r.transport, listeners);
+  await s.handle({ type: "start" });
+  expect(r.of("ready")[0]).toMatchObject({ eventId: "evt-demo", ears: false });
+  expect(r.of("openers")[0].lines.join(" ")).toMatch(/what's yours\?/);
+
+  await s.handle({ type: "say", speaker: "them", text: "Hey! I'm Mati, what's your name?" });
+  await s.stop();
+  expect(r.of("participants").at(-1)?.participants).toEqual([{ name: "Mati" }]);
+
+  const saved = await db.conversations.get(userId, s.conversation.id);
+  expect(saved).toMatchObject({ eventId: "evt-demo", participants: [{ name: "Mati" }] });
+  expect(saved?.personId).toBeUndefined();
+});
+
+test("a caught name that matches an attendee attaches their dossier and whispers who they are", async () => {
+  const userId = await newUser();
+  const r = recorder();
+  const s = new LiveSession(userId, r.transport, [hintsListener]);
+  await s.handle({ type: "start" });
+  await s.handle({ type: "say", speaker: "unknown", text: "Oh hi, I'm Priya." });
+  await s.stop();
+  expect(s.person?.id).toBe("p-priya");
+  expect(s.conversation.participants).toEqual([{ name: "Priya Patel", personId: "p-priya" }]);
+  expect(r.of("hint").map((h) => h.text)).toEqual(["That's Priya. Ask about LLM evals"]);
+  expect(r.of("openers").at(-1)?.lines[0]).toBe("How do you evaluate LLM features before shipping?");
+});
+
+test("group: tapped people, a caught stranger, primary stays the first prepped person", async () => {
+  const userId = await newUser();
+  const r = recorder();
+  const s = new LiveSession(userId, r.transport, listeners);
+  await s.handle({ type: "start", personId: "p-sam" });
+  await s.handle({ type: "add_participant", personId: "p-priya" });
+  await s.handle({ type: "set_person", personId: "nope" }); // bad id must not drop Sam
+  await s.handle({ type: "say", speaker: "them", text: "This is my cofounder Lena." });
+  await s.handle({ type: "remove_participant", personId: "p-sam" });
+  await s.handle({ type: "add_participant", personId: "p-sam" });
+  await s.stop();
+
+  expect(r.of("error")).toHaveLength(1);
+  const saved = await db.conversations.get(userId, s.conversation.id);
+  expect(saved?.participants.map((p) => p.name)).toEqual(["Priya Patel", "Lena", "Sam Chen"]);
+  expect(saved?.personId).toBe("p-priya"); // Sam left, so Priya took over as primary
+  expect(saved?.eventId).toBe("evt-demo");
+});
+
+test("reconnect resumes the same conversation (in memory), and replays it to the new socket", async () => {
+  const userId = await newUser();
+  const a = recorder();
+  const s = sessionFor(userId, a.transport, listeners);
+  await s.handle({ type: "start", personId: "p-sam" });
+  await s.handle({ type: "say", speaker: "them", text: "What are you working on?" });
+  s.detach(a.transport); // page refresh
+
+  const b = recorder();
+  const again = sessionFor(userId, b.transport, listeners, s.conversation.id);
+  expect(again).toBe(s);
+  await again.handle({ type: "start", conversationId: s.conversation.id });
+  expect(b.of("ready")[0]).toMatchObject({ conversationId: s.conversation.id, resumed: true });
+  expect(b.of("transcript").map((t) => t.text)).toEqual(["What are you working on?"]);
+
+  await again.handle({ type: "say", speaker: "me", text: "An earpiece coach." });
+  await again.stop();
+  const all = await db.conversations.list(userId);
+  expect(all).toHaveLength(1);
+  expect(all[0].transcript).toHaveLength(2);
+});
+
+test("resume after the conversation was already saved (server restart) continues it under the same id", async () => {
+  const userId = await newUser();
+  const first = new LiveSession(userId, recorder().transport, []);
+  await first.handle({ type: "start" });
+  await first.handle({ type: "add_participant", name: "Mati" });
+  await first.handle({ type: "say", speaker: "them", text: "Line one" });
+  await first.stop();
+
+  const r = recorder();
+  const second = sessionFor(userId, r.transport, [], first.conversation.id);
+  expect(second).not.toBe(first);
+  await second.handle({ type: "start", conversationId: first.conversation.id });
+  await second.handle({ type: "say", speaker: "them", text: "Line two" });
+  await second.stop();
+  const all = await db.conversations.list(userId);
+  expect(all).toHaveLength(1);
+  expect(all[0]).toMatchObject({ participants: [{ name: "Mati" }] });
+  expect(all[0].transcript.map((u) => u.text)).toEqual(["Line one", "Line two"]);
+});
+
+test("stop saves within the cap even if a listener hangs forever", async () => {
+  const userId = await newUser();
+  const stuck: LiveListener = { name: "stuck", onUtterance: () => new Promise(() => {}) };
+  const s = new LiveSession(userId, recorder().transport, [stuck]);
+  await s.handle({ type: "start" });
+  await s.handle({ type: "say", speaker: "them", text: "hello?" });
+  const t0 = Date.now();
+  await s.stop();
+  expect(Date.now() - t0).toBeLessThan(STOP_WAIT_MS + 500);
+  expect(await db.conversations.get(userId, s.conversation.id)).toBeTruthy();
+});
+
+test("a newer whisper silences the older one: no old audio after the new hint", async () => {
+  const userId = await newUser();
+  const r = recorder();
+  const s = new LiveSession(userId, r.transport, []);
+  await s.handle({ type: "start" });
+  const first = s.whisper("old");
+  await new Promise((resolve) => setTimeout(resolve, 15)); // old is mid-stream
+  await Promise.all([first, s.whisper("new")]);
+  const newHintAt = r.sent.findIndex((m) => m.type === "hint" && m.text === "new");
+  const oldAudioAfter = r.sent.slice(newHintAt).filter((m) => m.type === "audio" && m.text === "old");
+  expect(oldAudioAfter).toEqual([]);
+  expect(r.sent.filter((m) => m.type === "audio" && m.text === "new")).toHaveLength(3);
+});
