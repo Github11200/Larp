@@ -96,10 +96,15 @@ export type Contact = z.infer<typeof Contact>;
 export const Speaker = z.enum(["me", "them", "unknown"]);
 export type Speaker = z.infer<typeof Speaker>;
 
+/** A line's voiceprint from the mic audio, used to tell the user from others. */
+export const Voice = z.object({ db: z.number(), pitchHz: z.number().optional() });
+export type Voice = z.infer<typeof Voice>;
+
 export const Utterance = z.object({
   speaker: Speaker,
   text: z.string(),
   at: z.number(),
+  voice: Voice.optional(),
 });
 export type Utterance = z.infer<typeof Utterance>;
 
