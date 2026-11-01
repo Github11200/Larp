@@ -28,10 +28,14 @@ export interface Ask {
 export const llmAvailable = Boolean(env.basetenKey);
 
 const BASE_URL = "https://inference.baseten.co/v1";
+/** Baseten's GLM/DeepSeek/Kimi think before answering unless told not to. */
+const NO_THINKING = { chat_template_kwargs: { enable_thinking: false, thinking: false } };
 
 /** One call, typed JSON back, validated against the schema. */
 export async function askJson<S extends z.ZodType>(schema: S, ask: Ask): Promise<z.output<S>> {
   const res = await complete(ask, "smart", false, {
+    // Structured extraction doesn't need reasoning; it only burns max_tokens and can truncate the JSON.
+    ...NO_THINKING,
     response_format: {
       type: "json_schema",
       json_schema: { name: "result", schema: z.toJSONSchema(schema), strict: true },
@@ -66,7 +70,7 @@ async function complete(ask: Ask, defaultTier: ModelTier, stream: boolean, extra
       messages,
       max_tokens: ask.maxTokens ?? (tier === "fast" ? 100 : 2000),
       // These models think before answering by default; the live path can't wait for that.
-      ...(tier === "fast" && { chat_template_kwargs: { enable_thinking: false, thinking: false } }),
+      ...(tier === "fast" && NO_THINKING),
       stream,
       ...extra,
     }),
