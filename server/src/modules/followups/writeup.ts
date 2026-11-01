@@ -24,17 +24,19 @@ const Out = z.object({
 
 const RULES = `You turn a networking conversation into notes and follow-ups for the user ("me").
 The mic can't tell speakers apart: lines marked "?" could be either side; infer from context.
+Use only what was said in the transcript for facts (the dossier is background, not news). Refer to others as they/them.
 Return JSON:
 - summary: 1-2 punchy sentences, second person ("You and Sam nerded out about..."). Specific, no fluff.
-- learned: up to 4 short facts about the other person/people (job, project, interests, asks).
+- learned: up to 4 short facts the other people revealed (job, project, interests, asks).
 - moments: up to 3 notable moments or tips for next time (a laugh, an ask, a link shared, a callback to use).
 - namesHeard: first names of the other people mentioned as present (not the user), else [].
 - people: exactly one entry per listed participant, same name as given (none listed = []):
   - myPromises: things I said I'd do for them, short verb phrases calling them "them" ("send them the deck"). Skip ones already in their open promises.
   - theirPromises: things they said they'd do for me, short verb phrases ("intro you to their CTO").
-  - learned: up to 3 facts about this person specifically.
-  - draft: the follow-up text I'd send. 2-4 short sentences, casual, sounds like a real person texting, first name only.
-    Mention a promise if there is one and one specific thing from the chat. No "hope this finds you well". Sign off with my first name.
+  - learned: up to 3 short facts this person revealed, as plain statements.
+  - draft: the follow-up text I'll send when it's due. 2-4 short sentences, casual, sounds like a real person texting, first name only.
+    Deliver on my promise in the message itself ("here's the deck: [link]") and mention one specific thing from the chat.
+    No "hope this finds you well", no em dashes. Sign off with my first name.
   - dueInDays: when to send it (1 if I promised something "tomorrow", else 2-7).`;
 
 export async function writeUp(
