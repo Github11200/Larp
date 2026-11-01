@@ -38,38 +38,47 @@ function memoryStore(): DocStore {
 
 function postgresStore(url: string): DocStore {
   const sql = postgres(url, { ssl: "prefer", max: 5 }); // Render internal URLs may skip TLS; external ones need it
-  const ready = sql`
-    create table if not exists docs (
-      user_id text not null,
-      coll text not null,
-      id text not null,
-      data jsonb not null,
-      updated_at timestamptz not null default now(),
-      primary key (user_id, coll, id)
-    )`;
+  // Created on first use. If that fails (DB still waking up), the next query tries again instead of failing forever.
+  let table: Promise<void> | undefined;
+  const ready = () =>
+    (table ??= sql`
+      create table if not exists docs (
+        user_id text not null,
+        coll text not null,
+        id text not null,
+        data jsonb not null,
+        updated_at timestamptz not null default now(),
+        primary key (user_id, coll, id)
+      )`.then(
+      () => undefined,
+      (e) => {
+        table = undefined;
+        throw e;
+      },
+    ));
   return {
     async get(u, c, i) {
-      await ready;
+      await ready();
       const [row] = await sql`select data from docs where user_id = ${u} and coll = ${c} and id = ${i}`;
       return row?.data ?? null;
     },
     async put(u, c, i, data) {
-      await ready;
+      await ready();
       await sql`
         insert into docs (user_id, coll, id, data) values (${u}, ${c}, ${i}, ${sql.json(data as never)})
         on conflict (user_id, coll, id) do update set data = excluded.data, updated_at = now()`;
     },
     async list(u, c) {
-      await ready;
+      await ready();
       const rows = await sql`select data from docs where user_id = ${u} and coll = ${c} order by updated_at`;
       return rows.map((r) => r.data);
     },
     async remove(u, c, i) {
-      await ready;
+      await ready();
       await sql`delete from docs where user_id = ${u} and coll = ${c} and id = ${i}`;
     },
     async scan(c) {
-      await ready;
+      await ready();
       const rows = await sql`select user_id, data from docs where coll = ${c}`;
       return rows.map((r) => ({ userId: r.user_id as string, data: r.data }));
     },

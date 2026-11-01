@@ -11,10 +11,13 @@ export const redis = () => new Redis(env.redisUrl!, { maxRetriesPerRequest: null
 
 let queue: Queue | undefined;
 
+// Payloads can carry base64 screenshots and the free Key Value is 25MB with noeviction (full = enqueue fails),
+// so finished jobs are dropped right away; a few failures are kept for debugging.
+
 export async function enqueue<K extends JobName>(name: K, payload: JobPayload<K>): Promise<void> {
   if (env.redisUrl) {
     queue ??= new Queue(QUEUE_NAME, { connection: redis() });
-    await queue.add(name, payload, { attempts: 2, removeOnComplete: 100, removeOnFail: 100 });
+    await queue.add(name, payload, { attempts: 2, removeOnComplete: true, removeOnFail: 10 });
     return;
   }
   const { runJob } = await import("../jobs"); // lazy: jobs import modules that import this file

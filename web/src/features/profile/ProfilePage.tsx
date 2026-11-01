@@ -1,7 +1,7 @@
 // Chunk 3 · Who you are: feed it a resume + links, then fix anything it got wrong, all on one screen.
 import { api, type Profile } from "@larp/shared";
 import { ChevronDown } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Notice, Pending, Title } from "../../components/ui";
 import { call } from "../../lib/api";
 import { useApi } from "../../lib/useApi";
@@ -10,14 +10,8 @@ import { ProfileCard } from "./ProfileCard";
 
 export function ProfilePage() {
   const profile = useApi(api.getProfile, undefined, (p) => p?.status === "pending");
-  const p = profile.data;
+  const { p, save } = useOptimisticSave(profile.data, profile.reload);
   const hasContent = Boolean(p && (p.name || p.links.length));
-
-  const save = async (patch: Partial<Profile>) => {
-    if (!p) return;
-    await call(api.putProfile, { body: { ...p, ...patch } });
-    void profile.reload();
-  };
 
   if (p?.status === "pending") return <Learning />;
 
@@ -39,7 +33,7 @@ export function ProfilePage() {
         <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 py-3 [&::-webkit-details-marker]:hidden">
           <span>
             <span className="block text-[16px] font-semibold">Add more about you</span>
-            <span className="block text-[14px] text-muted">New resume, more links. It relearns you from scratch.</span>
+            <span className="block text-[14px] text-muted">New resume, more links. It adds to what it already knows.</span>
           </span>
           <ChevronDown size={20} strokeWidth={1.75} aria-hidden className="shrink-0 text-muted transition-transform group-open:rotate-180" />
         </summary>
@@ -49,6 +43,35 @@ export function ProfilePage() {
       </details>
     </div>
   );
+}
+
+/** Edits show instantly and save in order, each on top of the last, so quick edits never undo each other. */
+function useOptimisticSave(server: Profile | null | undefined, reload: () => Promise<unknown>) {
+  const [draft, setDraft] = useState(server);
+  const latest = useRef(server);
+  const pending = useRef(0);
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+
+  // Take the server's copy only when none of our edits are still on the way.
+  useEffect(() => {
+    if (pending.current) return;
+    latest.current = server;
+    setDraft(server);
+  }, [server]);
+
+  const save = (patch: Partial<Profile>) => {
+    if (!latest.current) return;
+    const next = { ...latest.current, ...patch };
+    latest.current = next;
+    setDraft(next);
+    pending.current++;
+    queue.current = queue.current
+      .then(() => call(api.putProfile, { body: next }))
+      .catch((e) => console.error("[profile save]", e))
+      .finally(() => --pending.current || void reload());
+  };
+
+  return { p: draft, save };
 }
 
 const LINES = [
