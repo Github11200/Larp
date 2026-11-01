@@ -3,7 +3,7 @@ import type { Event, Profile } from "@larp/shared";
 import { z } from "zod";
 import { askJson, llmAvailable } from "../../lib/llm";
 import { cached } from "./cache";
-import { RESPECT } from "./prompts";
+import { neutral, RESPECT } from "./prompts";
 import type { Guest } from "./sources";
 
 /** More than this and the prompt gets slow; the rest stay unranked. */
@@ -26,11 +26,25 @@ export async function rankGuests(guests: Guest[], profile: Profile | null, event
     `I'm going to "${event.name}". ${event.description ?? ""}\n\nMe: ${me}\n\nGuests:\n${list}\n\n` +
     "Score every guest 0-1 on how worth meeting they are for me (shared interests, could hire/help/teach me, hosts matter). " +
     "why = one punchy line, max 12 words, speaking to me (e.g. 'Hires voice AI interns; you just built one'). " +
-    `Guests with no info: score low, why = a playful line about the mystery. ${RESPECT}`;
+    `Guests with only a name: score low. ${RESPECT}`;
   const { ranked } = await cached("rank", prompt, () => askJson(Ranking, { prompt, maxTokens: 4000 }));
   const byIndex = new Map(ranked.map((r) => [r.i, r]));
-  return guests.map((_, i) => {
+  return guests.map((g, i) => {
     const r = byIndex.get(i);
-    return r ? { score: Math.max(0, Math.min(1, r.score)), why: r.why } : {};
+    if (!r) return {};
+    return { score: Math.max(0, Math.min(1, r.score)), why: hasBio(g) ? neutral(r.why) : mysteryLine(g, i) };
   });
 }
+
+/** "Host" alone is a role, not info about the person. */
+const hasBio = (g: Guest) => Boolean(g.headline && g.headline !== "Host");
+
+// With only a name to go on, models joke about the name. These people are in the room, so use fixed lines.
+const MYSTERY = {
+  host: ["Runs this whole thing. Say thanks, then ask why.", "Organizer with zero bio. Ask what they're building.", "Host, no lore online. Ask in person."],
+  guest: ["No bio. Pure mystery. Go find out.", "Blank profile, unknown power level.", "Zero lore online. Ask what they're building."],
+};
+const mysteryLine = (g: Guest, i: number) => {
+  const lines = g.headline === "Host" ? MYSTERY.host : MYSTERY.guest;
+  return lines[i % lines.length];
+};

@@ -4,7 +4,7 @@ import { Dossier, type Person } from "@larp/shared";
 import { db, newId } from "../../lib/db";
 import { askJson, llmAvailable } from "../../lib/llm";
 import { cached } from "./cache";
-import { RESPECT } from "./prompts";
+import { neutral, RESPECT } from "./prompts";
 import { rankGuests } from "./rank";
 import { researchPerson } from "./research";
 import { dedupe, parseGuestList, readScreenshots, scrapeEvent, type EventPage } from "./sources";
@@ -61,10 +61,13 @@ async function writeDossier(userId: string, person: Person): Promise<Dossier> {
   const prompt =
     `I'm about to meet someone at "${event?.name ?? "an event"}". Brief me like a hype-man who did their homework.\n\n` +
     `Me: ${me}\n\nThem: ${them}\n\nWeb search results (may include other people with the same name; ignore those):\n${research || "none"}\n\n` +
-    "summary: 1-2 sentences on who they are. workingOn, interests: short phrases, only things the sources support. " +
-    "commonGround: overlaps between me and them. openers: 3 casual lines I can actually say out loud, max 15 words each, " +
+    "I'll glance at this on my phone seconds before walking up, so be brief. summary: max 2 short sentences. " +
+    "workingOn, interests, commonGround: max 3 items each, max 10 words each, only things the sources support. " +
+    "openers: 3 casual lines I can actually say out loud, max 15 words each, " +
     `referencing something specific about them. If you know little, say so in summary rather than inventing facts. ${RESPECT}`;
-  return cached("dossier", prompt, () => askJson(Dossier, { prompt }));
+  const d = await cached("dossier", prompt, () => askJson(Dossier, { prompt }));
+  const all = (xs: string[]) => xs.map(neutral);
+  return { summary: neutral(d.summary), workingOn: all(d.workingOn), interests: all(d.interests), commonGround: all(d.commonGround), openers: all(d.openers) };
 }
 
 const stubDossier = (p: Person): Dossier => ({

@@ -28,7 +28,10 @@ const count = await page.locator("a[href^='/people/']").count();
 
 await page.locator("a[href^='/people/']").first().click();
 await page.getByText("Build dossier").click();
-await page.getByText("Say this").waitFor({ timeout: 90_000 });
+await page.getByText("Say this").waitFor({ timeout: 90_000 }).catch(async (e) => {
+  await shot("3-dossier-failed");
+  throw e;
+});
 await shot("3-dossier");
 
 await browser.close();
