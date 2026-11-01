@@ -9,6 +9,8 @@ envVarGroups:
         sync: false
       - key: BASETEN_API_KEY
         sync: false
+      - key: EXA_API_KEY # attendee research for dossiers (chunk 4)
+        sync: false
 
 services:
   # Phone web app, served from Render's CDN.

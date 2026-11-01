@@ -11,7 +11,7 @@ export const env = {
   llmFastModel: process.env.LLM_FAST_MODEL || "zai-org/GLM-5.2-Fast",
   llmSmartModel: process.env.LLM_SMART_MODEL || "zai-org/GLM-5.3",
   /** Must accept images (guest-list screenshots). */
-  llmVisionModel: process.env.LLM_VISION_MODEL || "meta-llama/Llama-4-Maverick-17B-128E-Instruct",
+  llmVisionModel: process.env.LLM_VISION_MODEL || "deepseek-ai/DeepSeek-V4.1-Flash-Fast",
   /** Exa web search for person research (chunk 4). Unset = dossiers use only what the guest list had. */
   exaKey: process.env.EXA_API_KEY || undefined,
   /** Comma-separated origins allowed to call the API (the Render static site URL). Unset = any. */
