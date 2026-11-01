@@ -478,7 +478,7 @@ const FILLER = new Set(
     "hey hi um uh like just really so up right now"
   ).split(" "),
 );
-const contentWords = (s: string) => words(s).filter((w) => !FILLER.has(w));
+export const contentWords = (s: string) => words(s).filter((w) => !FILLER.has(w));
 
 /** On a speaker (not earbuds) the mic picks up the whisper; such lines are mostly a recent hint's words. */
 export function isEchoOfHint(text: string, hints: Hint[], now = Date.now()): boolean {

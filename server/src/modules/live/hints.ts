@@ -1,13 +1,15 @@
 // Chunk 1 · Decides when to whisper and what. The core demo moment.
 // One fast LLM call per line does two jobs: works out who said it (the mic can't tell),
 // and decides whether a hint helps. A few quiet seconds also earns a hint to restart the chat.
-// Questions get answered fast: a "?" in the live transcript fires a hint before the line is even done,
-// because the user fills ("um, good question") while the coach thinks, and that talk mustn't cancel it.
+// Questions get answered fast: a "?" in the live transcript starts the answer before the line is even done,
+// and it's whispered the moment the line is final, if the final line still asks it (partials get misheard).
 // When a prepped person turns up mid-chat (name caught or tapped), the coach tells you who they are.
 import type { Person, Speaker, Utterance } from "@larp/shared";
 import { llmAvailable, streamText } from "../../lib/llm";
-import { isEchoOfHint, repeatsHint, type LiveContext, type LiveListener } from "./session";
+import { contentWords, isEchoOfHint, repeatsHint, type LiveContext, type LiveListener } from "./session";
 import { buildSystem, linesSinceMe, nudgePrompt, parseReply, stallPrompt, turnPrompt, unfinishedPrompt } from "./hintPrompt";
+
+type Reply = ReturnType<typeof parseReply>;
 
 const STALL_MS = 12_000;
 /** A lull right after a whisper is the user saying it or thinking: no restart hint then. */
@@ -29,10 +31,11 @@ interface HintState {
   /** Bumped per hint request. A hint is dropped once a newer request's hint has been spoken. */
   req: number;
   spokenReq: number;
-  /** The line still being spoken, how many of its questions were seen, and whether one was hinted early. */
+  /** The line still being spoken, and how many of its questions were seen. */
   partial: string;
   questionsSeen: number;
-  hintedEarly: boolean;
+  /** An answer fetched while the question was still being spoken; whispered only once the line is final and still asks it. */
+  early?: { question: string; reply: Promise<Reply> };
   questionTimer?: NodeJS.Timeout;
   lastHintAt: number;
   /** How long the last whisper takes to say; even an urgent hint waits it out instead of cutting it off. */
@@ -54,7 +57,6 @@ const stateOf = (ctx: LiveContext) =>
       spokenReq: 0,
       partial: "",
       questionsSeen: 0,
-      hintedEarly: false,
       lastHintAt: 0,
       lastHintMs: 0,
       lastJoinAt: 0,
@@ -83,12 +85,12 @@ export const hintsListener: LiveListener = {
   async onUtterance(ctx, u) {
     const st = stateOf(ctx);
     const seq = ++st.seq;
-    // The finished line replaces the in-progress one; its questions are hinted below unless one already was.
+    // The finished line replaces the in-progress one; an answer fetched mid-line is used below if it still fits.
     clearTimeout(st.questionTimer);
-    const alreadyHinted = st.hintedEarly;
+    const early = st.early;
+    st.early = undefined;
     st.partial = "";
     st.questionsSeen = 0;
-    st.hintedEarly = false;
     clearTimeout(st.stallTimer);
     st.stallTimer = setTimeout(() => ctx.track(stallHint(ctx, seq)), STALL_MS);
     st.stallTimer.unref();
@@ -100,12 +102,10 @@ export const hintsListener: LiveListener = {
     }
     if (!llmAvailable) return stubHint(ctx, st, u);
     if (u.speaker === "me") return; // you don't need a hint for what you just said
+    if (early && (await speakEarly(ctx, st, u, early))) return;
     const joinIn = leftOut(ctx, st);
     const urgent = countQuestions(u.text) > 0;
-    // Already answered mid-line: this call only settles who spoke, it doesn't whisper a second answer.
-    const { reply } = await askHint(ctx, st, turnPrompt(ctx.conversation.transcript, ctx.conversation.hints, { joinIn }), urgent, {
-      speak: !alreadyHinted,
-    });
+    const { reply } = await askHint(ctx, st, turnPrompt(ctx.conversation.transcript, ctx.conversation.hints, { joinIn }), urgent);
     if (u.speaker === "unknown" && reply.speaker) ctx.setSpeaker(u, reply.speaker);
   },
   async onNudge(ctx) {
@@ -130,20 +130,44 @@ export const hintsListener: LiveListener = {
 /** A question heard mid-line: hint now rather than after the speaker (and the user's reply) pauses. */
 async function unfinishedHint(ctx: LiveContext, st: HintState): Promise<void> {
   if (!st.partial || ctx.conversation.endedAt) return;
-  try {
-    const { spoken } = await askHint(ctx, st, unfinishedPrompt(ctx.conversation.transcript, ctx.conversation.hints, st.partial), true, {
-      early: true,
-    });
-    if (spoken) st.hintedEarly = true;
-  } catch (e) {
-    console.error("[live:hints] question", e); // timer callback: nothing upstream to catch it
-  }
+  const reply = ask(ctx, unfinishedPrompt(ctx.conversation.transcript, ctx.conversation.hints, st.partial))
+    .then(parseReply)
+    .catch((e): Reply => (console.error("[live:hints] question", e), {}));
+  st.early = { question: lastQuestion(st.partial), reply };
+  await reply;
+}
+
+/**
+ * Whispers the answer fetched mid-line, now that the line is final. Partials get revised ("what are you wearing" becomes
+ * "working on") or belong to the user, so it's only spoken if the final line still asks the same question
+ * and the coach didn't judge the user asked it. False: fall back to a normal hint for the line.
+ */
+async function speakEarly(ctx: LiveContext, st: HintState, u: Utterance, early: NonNullable<HintState["early"]>): Promise<boolean> {
+  const reply = await early.reply;
+  if (!reply.hint || reply.speaker === "me" || !stillAsks(u.text, early.question)) return false;
+  if (u.speaker === "unknown") ctx.setSpeaker(u, "them");
+  if (!claim(st, true)) return true;
+  st.spokenReq = ++st.req;
+  st.lastHintMs = whisperMs(reply.hint);
+  await ctx.whisper(reply.hint);
+  return true;
+}
+
+/** The last question in a line still being spoken. */
+const lastQuestion = (text: string) => text.split(/(?<=[.!?])\s+/).filter((s) => s.includes("?")).at(-1) ?? text;
+
+/** Most of the question's distinctive words made it into the final line. */
+function stillAsks(line: string, question: string): boolean {
+  const asked = contentWords(question);
+  if (!asked.length) return line.includes("?");
+  const said = new Set(contentWords(line));
+  return asked.filter((w) => said.has(w)).length / asked.length >= 0.6;
 }
 
 /**
  * Asks for a hint and whispers it, unless a hint from a newer request already went out. `urgent` (a question) skips the cooldown.
  * Stays quiet when the coach judges the user said the line (else it answers the user's own questions),
- * and when the chat moved on while it thought. `early`: asked mid-line, so that line finishing isn't "moving on".
+ * and when the chat moved on while it thought.
  * `force`: the user asked (volume-button nudge), so none of that holds it back.
  */
 async function askHint(
@@ -151,12 +175,12 @@ async function askHint(
   st: HintState,
   prompt: string,
   urgent: boolean,
-  { speak = true, early = false, force = false } = {},
-): Promise<{ reply: ReturnType<typeof parseReply>; spoken: boolean }> {
+  { force = false } = {},
+): Promise<{ reply: Reply; spoken: boolean }> {
   const req = ++st.req;
   const heard = ctx.conversation.transcript.length;
   const reply = parseReply(await ask(ctx, prompt));
-  const ok = force || (speak && reply.speaker !== "me" && req > st.spokenReq && !movedOn(ctx, heard, early));
+  const ok = force || (reply.speaker !== "me" && req > st.spokenReq && !movedOn(ctx, heard));
   if (!reply.hint || !ok || !(force || claim(st, urgent))) return { reply, spoken: false };
   st.lastHintAt = Date.now();
   st.spokenReq = req;
@@ -166,9 +190,9 @@ async function askHint(
 }
 
 /** Since the request: the user spoke, or someone said something newer than the line being answered. */
-function movedOn(ctx: LiveContext, heard: number, early: boolean): boolean {
+function movedOn(ctx: LiveContext, heard: number): boolean {
   const since = ctx.conversation.transcript.slice(heard);
-  return since.some((u) => u.speaker === "me") || since.length > (early ? 1 : 0);
+  return since.length > 0;
 }
 
 const whisperMs = (text: string) => 2500 + 300 * text.split(/\s+/).length;

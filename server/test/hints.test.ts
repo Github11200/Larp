@@ -74,16 +74,38 @@ test("a question gets its hint soon after another hint, once that whisper has pl
   expect(hints()).toEqual(["That sounds fun, where do you climb?", "Yeah, Squamish twice a year"]);
 });
 
-test("a question mid-line is hinted before the line finishes, and not again when it does", async () => {
+test("a question mid-line is answered as soon as the line is final, with no second call", async () => {
   llm.replies.push({ text: "them\nHonestly I think it'll cut model prices", delayMs: 0 }, { text: "them\nsecond take", delayMs: 0 });
   const { s, hints } = await session();
   hintsListener.onPartial!(s, "Did you hear about the IPO?", "unknown");
-  await vi.waitFor(() => expect(hints()).toEqual(["Honestly I think it'll cut model prices"]));
+  await vi.waitFor(() => expect(llm.prompts).toHaveLength(1));
   expect(llm.prompts[0]).toContain("still being spoken");
+  expect(hints()).toEqual([]); // not spoken off a partial
   await s.handle({ type: "say", speaker: "unknown", text: "Did you hear about the IPO? Um, yeah." });
   await s.stop();
-  expect(hints()).toEqual(["Honestly I think it'll cut model prices"]); // the finished line is labeled, but the cooldown holds
-  expect(llm.prompts).toHaveLength(2);
+  expect(hints()).toEqual(["Honestly I think it'll cut model prices"]);
+  expect(llm.prompts).toHaveLength(1);
+  expect(s.conversation.transcript[0].speaker).toBe("them");
+});
+
+test("an answer to a misheard partial is dropped when the final line asks something else (prod: 'Just a hoodie')", async () => {
+  llm.replies.push({ text: "them\nJust a hoodie, hackathon uniform", delayMs: 0 }, { text: "them\nA coach for networking events", delayMs: 0 });
+  const { s, hints } = await session();
+  hintsListener.onPartial!(s, "Do you know what I'm wearing?", "unknown");
+  await vi.waitFor(() => expect(llm.prompts).toHaveLength(1));
+  await s.handle({ type: "say", speaker: "unknown", text: "Do you know what I'm working on?" });
+  await s.stop();
+  expect(hints()).toEqual(["A coach for networking events"]);
+});
+
+test("an answer fetched for the user's own question is never spoken", async () => {
+  llm.replies.push({ text: "them\nNorth of a hundred billion", delayMs: 0 });
+  const { s, hints } = await session();
+  hintsListener.onPartial!(s, "No, I haven't. Do you know?", "unknown");
+  await vi.waitFor(() => expect(llm.prompts).toHaveLength(1));
+  await s.handle({ type: "say", speaker: "me", text: "No, I haven't. Do you know?" });
+  await s.stop();
+  expect(hints()).toEqual([]);
 });
 
 test("the coach stays quiet when it judges the user asked the question (prod: it answered 'Teaching what?')", async () => {
