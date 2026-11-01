@@ -34,7 +34,7 @@ The short version: **build inside your folder, talk to other chunks only through
 | 3 Knowledge base | `server/src/modules/profile/*` | `web/src/features/profile/*` | `profile.build` job, `Profile` doc |
 | 4 Prep | `server/src/modules/prep/*` | `web/src/features/prep/*` | `prep.*` jobs, `Event`/`Person` docs |
 | 5 Follow-ups | `server/src/modules/followups/*`, `cron-nudge.ts` | `web/src/features/followups/*` | `followUpsListener` (onEnd), cron |
-| 6 App shell | — | `App.tsx`, `routes.ts`, `components/*`, `index.css` | the look + navigation |
+| 6 App shell | — | `App.tsx`, `routes.ts`, `components/*`, `index.css`, `features/setup/*`, PWA config | the look + navigation |
 | 7 Demo | `scripts/live-sim.ts`, fixtures | — | — |
 
 Change anything inside your folders however you like: libraries, structure, prompts, providers.
