@@ -5,3 +5,5 @@ dist
 !.env.example
 .DS_Store
 scripts/.shots
+web/.impeccable/mocks
+web/.impeccable/decision-payload.json

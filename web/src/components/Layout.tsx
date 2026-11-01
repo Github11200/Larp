@@ -1,31 +1,36 @@
-// Chunk 6 · Phone-first shell: content + bottom nav + a big "Go live" button.
+// Chunk 6 · Phone-first shell: content + bottom tab bar with "Go live" always one tap away.
+import { Inbox, Mic, User, Users } from "lucide-react";
 import { Link, NavLink, Outlet } from "react-router";
 import { paths } from "../routes";
 
 const tabs = [
-  { to: paths.home(), label: "People" },
-  { to: paths.followUps(), label: "Follow-ups" },
-  { to: paths.profile(), label: "Me" },
+  { to: paths.home(), label: "People", Icon: Users },
+  { to: paths.followUps(), label: "Follow-ups", Icon: Inbox },
+  { to: paths.profile(), label: "Me", Icon: User },
 ];
 
 export function Layout() {
   return (
     <div className="mx-auto flex min-h-dvh max-w-md flex-col">
-      <main className="flex-1 px-4 pt-6 pb-28">
+      <main className="pt-safe flex-1 px-5 pb-32">
         <Outlet />
       </main>
-      <nav className="fixed inset-x-0 bottom-0 mx-auto flex max-w-md items-center gap-2 border-t border-white/10 bg-bg/95 px-4 py-3">
-        {tabs.map((t) => (
+      <nav className="pb-safe fixed inset-x-0 bottom-0 mx-auto flex max-w-md items-stretch border-t border-line bg-bg/90 px-2 pt-2 backdrop-blur-md">
+        {tabs.map(({ to, label, Icon }) => (
           <NavLink
-            key={t.to}
-            to={t.to}
+            key={to}
+            to={to}
             end
-            className={({ isActive }) => `flex-1 text-center text-sm ${isActive ? "text-fg" : "text-muted"}`}
+            className={({ isActive }) =>
+              `flex flex-1 flex-col items-center justify-center gap-1 text-[11px] font-medium ${isActive ? "text-fg" : "text-muted"}`
+            }
           >
-            {t.label}
+            <Icon size={22} strokeWidth={1.75} aria-hidden />
+            {label}
           </NavLink>
         ))}
-        <Link to={paths.live()} className="rounded-full bg-accent px-5 py-2 font-semibold text-bg">
+        <Link to={paths.live()} className="ml-2 flex items-center gap-2 bg-accent px-5 text-[15px] font-semibold text-bg active:opacity-75">
+          <Mic size={18} strokeWidth={2} aria-hidden />
           Go live
         </Link>
       </nav>
