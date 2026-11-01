@@ -131,7 +131,11 @@ function timelineIn(w: World, c: Contact): ContactTimeline {
   const conversations = w.conversations
     .filter((cv) => (cv.personId && pids.has(cv.personId)) || cv.participants.some(isThem))
     .sort((a, b) => b.startedAt - a.startedAt);
-  const followUps = w.followUps.filter((f) => isThem({ ...f, name: f.personName }) || conversations.some((cv) => cv.id === f.conversationId && cv.participants.length <= 1));
+  // A follow-up from a one-on-one with them is theirs even if its name is a guess.
+  const oneOnOnes = new Set(conversations.filter((cv) => cv.participants.length <= 1).map((cv) => cv.id));
+  const followUps = w.followUps.filter(
+    (f) => isThem({ ...f, name: f.personName }) || [f.conversationId, ...f.conversationIds].some((id) => oneOnOnes.has(id)),
+  );
   return { contact: c, status: statusOf(people, conversations, followUps), people, events, conversations, followUps };
 }
 

@@ -36,6 +36,8 @@ export function ContactPage() {
         {c.note && <p className="border-l border-line pl-4 text-[15px] whitespace-pre-line text-pretty">{c.note}</p>}
       </div>
 
+      <Learned items={[...new Set(t.followUps.flatMap((f) => f.learned))]} />
+
       {dossierPerson && <DossierSection person={dossierPerson} onChanged={() => void timeline.reload()} />}
 
       <Section title="Seen at" empty="No events together yet. Met in the wild.">
@@ -79,6 +81,23 @@ export function ContactPage() {
   );
 }
 
+/** Facts from your actual conversations beat the pre-event dossier, so they go first. */
+function Learned({ items }: { items: string[] }) {
+  if (!items.length) return null;
+  return (
+    <section className="space-y-2">
+      <SectionLabel>What you learned IRL</SectionLabel>
+      <ul className="divide-y divide-line border-y border-line">
+        {items.map((i) => (
+          <li key={i} className="py-2.5 text-[16px]">
+            {i}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 const eventOrder = (t: ContactTimeline, eventId: string) => t.events.findIndex((e) => e.id === eventId);
 
 function Section({ title, empty, children }: { title: string; empty?: string; children: React.ReactNode[] }) {
@@ -96,7 +115,7 @@ function Section({ title, empty, children }: { title: string; empty?: string; ch
 
 function ConversationLine({ conversation: cv, name }: { conversation: Conversation; name: string }) {
   const others = cv.participants.map((p) => p.name).filter((n) => n.toLowerCase() !== name.toLowerCase());
-  const said = cv.transcript.find((u) => u.speaker === "them")?.text;
+  const said = cv.notes?.summary || cv.transcript.find((u) => u.speaker === "them")?.text;
   return (
     <div className="space-y-1">
       <p className="text-[14px] text-muted">
@@ -113,6 +132,7 @@ function FollowUpLine({ followUp: f }: { followUp: FollowUp }) {
   return (
     <Link to={paths.followUps()} className="block space-y-1">
       <p className={`text-[13px] font-semibold ${f.status === "done" ? "text-muted" : "text-live"}`}>{f.status === "done" ? "Done" : "You promised"}</p>
+      {f.theirPromises.length > 0 && <p className="text-[14px] text-muted">They owe you: {f.theirPromises.join("; ")}</p>}
       {f.promises.length > 0 ? (
         <ul className="list-disc pl-5 text-[15px]">
           {f.promises.map((p) => (
