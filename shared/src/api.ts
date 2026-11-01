@@ -94,6 +94,13 @@ export const api = {
     body: z.object({ fresh: z.boolean().optional() }).optional(),
     res: Person,
   }),
+  /** Add names/screenshots to an existing event and re-prep it; existing people keep their dossiers. */
+  addGuests: route({
+    method: "POST",
+    path: "/api/events/:id/guests",
+    body: z.object({ guestList: z.string().optional(), screenshots: z.array(z.string()).optional() }),
+    res: Event,
+  }),
   updateEvent: route({ method: "PATCH", path: "/api/events/:id", body: Event.pick({ name: true }).partial(), res: Event }),
   /** Also removes its people and unlinks them from contacts. */
   deleteEvent: route({ method: "DELETE", path: "/api/events/:id", res: Ok }),
