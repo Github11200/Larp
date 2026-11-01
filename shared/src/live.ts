@@ -31,6 +31,8 @@ export const ClientMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("remove_participant"), personId: z.string().optional(), name: z.string().optional() }),
   /** Inject a transcript line without a mic. Used by tests, the sim script, and demo fallback. */
   z.object({ type: z.literal("say"), speaker: Speaker, text: z.string() }),
+  /** The user pressed both volume buttons: "they just said something, tell me what to say." */
+  z.object({ type: z.literal("nudge") }),
   /** End the conversation; server saves it and runs end-of-conversation listeners. */
   z.object({ type: z.literal("stop") }),
 ]);

@@ -212,3 +212,13 @@ test("speaking resets the left-out count", async () => {
   await vi.waitFor(() => expect(llm.prompts).toHaveLength(3)); // no LLM call for your own line
   expect(llm.prompts.some((p) => p.includes("a way in"))).toBe(false);
 });
+
+test("a volume-button nudge always whispers, even right after a hint and when the coach thinks the user spoke", async () => {
+  llm.replies.push({ text: "them\nWhere do you climb?", delayMs: 0 }, { text: "me\nSquamish, mostly bouldering", delayMs: 0 });
+  const { s, hints } = await session();
+  await s.handle({ type: "say", speaker: "unknown", text: "I'm into climbing." });
+  await vi.waitFor(() => expect(hints()).toHaveLength(1));
+  await s.handle({ type: "nudge" });
+  await vi.waitFor(() => expect(hints()).toEqual(["Where do you climb?", "Squamish, mostly bouldering"]));
+  await s.stop();
+});

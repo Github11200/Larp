@@ -11,6 +11,7 @@ import { paths } from "../../routes";
 import { metIds } from "../event/journey";
 import { LinkCard } from "../linkcards/LinkCard";
 import { useLive, type Line, type LiveStatus, type MicState } from "./useLive";
+import { useVolumeNudge } from "./useVolumeNudge";
 import { useWakeLock } from "./useWakeLock";
 
 export function LivePage() {
@@ -22,6 +23,7 @@ export function LivePage() {
   const started = live.mic === "on" || noEars;
   const room = useRoom(live.eventId, live.conversationId);
   useWakeLock(live.status !== "ended" && started);
+  useVolumeNudge(live.status !== "ended" && started, live.nudge);
 
   // Back to the event you're at; the chat you just had shows up there, notes cooking.
   const end = async () => {

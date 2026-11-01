@@ -48,6 +48,8 @@ export interface LiveListener {
   onPartial?(ctx: LiveContext, text: string, speaker: Speaker): void;
   /** Each finished utterance. */
   onUtterance?(ctx: LiveContext, u: Utterance): void | Promise<void>;
+  /** The user pressed the nudge button: "they just spoke, help me respond." */
+  onNudge?(ctx: LiveContext): void | Promise<void>;
   /** After the conversation is saved. */
   onEnd?(ctx: LiveContext): void | Promise<void>;
 }
@@ -122,6 +124,8 @@ export class LiveSession implements LiveContext {
         this.partial(msg.text, msg.speaker);
         this.track(this.commit(msg.text, msg.speaker)); // don't block the next message on a slow hint
         return;
+      case "nudge":
+        return this.nudge();
       case "stop":
         return this.stop();
     }
@@ -130,6 +134,14 @@ export class LiveSession implements LiveContext {
   /** Raw mic audio (MIC_AUDIO format). */
   audio(chunk: Buffer): void {
     this.stt?.write(chunk);
+  }
+
+  /** The user pressed the nudge button: recent unknown lines are THEM, and hints should fire. */
+  private async nudge(): Promise<void> {
+    for (const u of this.conversation.transcript.slice(-3)) {
+      if (u.speaker === "unknown") this.setSpeaker(u, "them");
+    }
+    await this.fanOut("onNudge", (l) => l.onNudge?.(this));
   }
 
   send(msg: ServerMsg): void {

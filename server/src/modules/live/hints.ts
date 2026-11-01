@@ -7,7 +7,7 @@
 import type { Person, Speaker, Utterance } from "@larp/shared";
 import { llmAvailable, streamText } from "../../lib/llm";
 import { isEchoOfHint, repeatsHint, type LiveContext, type LiveListener } from "./session";
-import { buildSystem, linesSinceMe, parseReply, stallPrompt, turnPrompt, unfinishedPrompt } from "./hintPrompt";
+import { buildSystem, linesSinceMe, nudgePrompt, parseReply, stallPrompt, turnPrompt, unfinishedPrompt } from "./hintPrompt";
 
 const STALL_MS = 12_000;
 /** A lull right after a whisper is the user saying it or thinking: no restart hint then. */
@@ -108,6 +108,18 @@ export const hintsListener: LiveListener = {
     });
     if (u.speaker === "unknown" && reply.speaker) ctx.setSpeaker(u, reply.speaker);
   },
+  async onNudge(ctx) {
+    const st = stateOf(ctx);
+    clearTimeout(st.stallTimer);
+    clearTimeout(st.questionTimer);
+    if (!llmAvailable) {
+      const hint = stubOpener(ctx, st);
+      if (hint) await whisper(ctx, st, hint, true);
+      return;
+    }
+    // The user asked for help: answer even if the coach thinks they spoke last or the chat moved on.
+    await askHint(ctx, st, nudgePrompt(ctx.conversation.transcript, ctx.conversation.hints), true, { force: true });
+  },
   onEnd(ctx) {
     const st = stateOf(ctx);
     clearTimeout(st.stallTimer);
@@ -132,19 +144,21 @@ async function unfinishedHint(ctx: LiveContext, st: HintState): Promise<void> {
  * Asks for a hint and whispers it, unless a hint from a newer request already went out. `urgent` (a question) skips the cooldown.
  * Stays quiet when the coach judges the user said the line (else it answers the user's own questions),
  * and when the chat moved on while it thought. `early`: asked mid-line, so that line finishing isn't "moving on".
+ * `force`: the user asked (volume-button nudge), so none of that holds it back.
  */
 async function askHint(
   ctx: LiveContext,
   st: HintState,
   prompt: string,
   urgent: boolean,
-  { speak = true, early = false } = {},
+  { speak = true, early = false, force = false } = {},
 ): Promise<{ reply: ReturnType<typeof parseReply>; spoken: boolean }> {
   const req = ++st.req;
   const heard = ctx.conversation.transcript.length;
   const reply = parseReply(await ask(ctx, prompt));
-  const ok = speak && reply.hint && reply.speaker !== "me" && req > st.spokenReq && !movedOn(ctx, heard, early);
-  if (!ok || !claim(st, urgent)) return { reply, spoken: false };
+  const ok = force || (speak && reply.speaker !== "me" && req > st.spokenReq && !movedOn(ctx, heard, early));
+  if (!reply.hint || !ok || !(force || claim(st, urgent))) return { reply, spoken: false };
+  st.lastHintAt = Date.now();
   st.spokenReq = req;
   st.lastHintMs = whisperMs(reply.hint!);
   await ctx.whisper(reply.hint!);

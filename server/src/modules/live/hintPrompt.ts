@@ -117,6 +117,17 @@ export function stallPrompt(transcript: Utterance[], hints: Hint[]): string {
   ].join("\n");
 }
 
+/** The user pressed the nudge button: they're signaling "they just said something, help me respond." */
+export function nudgePrompt(transcript: Utterance[], hints: Hint[]): string {
+  return [
+    context(transcript, hints),
+    "",
+    "The user just pressed a button signaling they need help responding RIGHT NOW.",
+    "The most recent lines are from the other person (THEM). Line 1: them.",
+    "Line 2: what the user should say back. This is urgent — always give a hint, never -.",
+  ].join("\n");
+}
+
 export function parseReply(text: string): { speaker?: Exclude<Speaker, "unknown">; hint?: string } {
   const [first = "", ...rest] = text.trim().split("\n").map((l) => l.trim()).filter(Boolean);
   const who = first.toLowerCase().replace(/[^a-z]/g, "");
