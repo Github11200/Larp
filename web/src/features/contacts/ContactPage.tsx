@@ -71,7 +71,7 @@ export function ContactPage() {
 
       {person && (
         <ActionBar>
-          <ButtonLink to={paths.live(person.id)}>
+          <ButtonLink to={paths.live({ personId: person.id, eventId: person.eventId })}>
             <Mic size={18} strokeWidth={2} aria-hidden />
             Talk to {firstName(c.name)}
           </ButtonLink>

@@ -36,7 +36,7 @@ export function PersonPage() {
       <DossierSection person={p} onChanged={() => void person.reload()} />
 
       <ActionBar>
-        <ButtonLink to={paths.live(p.id)}>
+        <ButtonLink to={paths.live({ personId: p.id, eventId: p.eventId })}>
           <Mic size={18} strokeWidth={2} aria-hidden />
           Talk to {firstName(p.name)}
         </ButtonLink>
