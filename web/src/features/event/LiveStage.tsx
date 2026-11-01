@@ -72,7 +72,7 @@ function ChatRow({ chat: c, eventId }: { chat: Conversation; eventId: string }) 
       lead={<Avatar name={chatTitle(c)} />}
       title={chatTitle(c)}
       meta={writing ? "Writing up notes…" : c.notes?.summary}
-      trail={writing ? <Pill tone="live">Notes</Pill> : <Pill tone="done">Saved</Pill>}
+      trail={writing && <Pill tone="live">Notes</Pill>}
     />
   );
 }

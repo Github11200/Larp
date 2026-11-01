@@ -85,7 +85,7 @@ export function Row({
       {lead}
       <span className="min-w-0 flex-1">
         <span className="block truncate text-body font-semibold">{title}</span>
-        {meta && <span className="mt-0.5 line-clamp-2 block text-meta text-muted">{meta}</span>}
+        {meta && <span className="mt-0.5 line-clamp-2 text-meta text-muted">{meta}</span>}
       </span>
       {trail}
       {chevron && (to || onClick) && <ChevronRight size={16} strokeWidth={1.75} className="shrink-0 text-muted" aria-hidden />}
