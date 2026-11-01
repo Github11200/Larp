@@ -56,7 +56,7 @@ function EventStep() {
         )
       }
     >
-      <EventsPage />
+      <EventsPage inSetup />
     </SetupFrame>
   );
 }

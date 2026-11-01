@@ -1,80 +1,151 @@
-// Chunk 4 · Home: add an event, see who's worth meeting.
+// Chunk 4 · Events tab: one event's people ranked by who's worth meeting, plus adding a new event.
 import { api, type Event, type Person } from "@larp/shared";
-import { FileCheck2, Plus } from "lucide-react";
+import { CalendarDays, FileCheck2, Plus } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router";
-import { Avatar, Button, Field, FilePick, Notice, Pending, Title, fieldClass } from "../../components/ui";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
+import { Avatar, BackLink, Button, Field, FilePick, Notice, Pending, Title, fieldClass } from "../../components/ui";
 import { call } from "../../lib/api";
 import { useApi } from "../../lib/useApi";
 import { paths } from "../../routes";
+import { QuickAdd } from "../contacts/QuickAdd";
+import { formatWhen, friendlyError } from "./format";
 import { toDataUrl } from "./images";
 
-export function EventsPage() {
+/** `/` shows the newest event, `/events/:id` a specific one. `?new=1` opens the add form. */
+export function EventsPage({ inSetup = false }: { inSetup?: boolean }) {
+  const { id } = useParams();
+  const [search, setSearch] = useSearchParams();
+  const navigate = useNavigate();
   const events = useApi(api.listEvents, undefined, (es) => es.some((e) => e.status === "pending"));
-  const [adding, setAdding] = useState(false);
-  const latest = events.data?.at(-1);
+  const list = events.data ?? [];
+  const event = id ? list.find((e) => e.id === id) : list.at(-1);
+  const closeForm = () => setSearch({}, { replace: true });
+  const [added, setAdded] = useState(0);
 
   if (events.loading) return <Pending>Checking your events…</Pending>;
-  if (!latest || adding) {
+  if (events.error) return <Notice>{friendlyError(events.error)}</Notice>;
+  if (id && !event) return <EventGone />;
+  if (!event || search.has("new")) {
     return (
       <div className="space-y-6">
         <Title sub="Link, guest list screenshots, or pasted names. Any one works. We'll rank who's worth your time.">
           Who's at your event?
         </Title>
-        <AddEvent onAdded={() => (setAdding(false), void events.reload())} />
-        {latest && (
-          <Button variant="ghost" className="w-full" onClick={() => setAdding(false)}>
-            Never mind, back to {latest.name}
-          </Button>
-        )}
+        <AddEvent
+          onCancel={event ? closeForm : undefined}
+          onAdded={(added) => (id ? navigate(paths.event(added.id)) : (closeForm(), void events.reload()))}
+        />
       </div>
     );
   }
   return (
     <div className="space-y-6">
-      <Title
-        sub={
-          <span className="flex items-center justify-between gap-3">
-            <span>{latest.date && formatWhen(latest.date)}</span>
-            <Button variant="ghost" className="-my-2 -mr-2 shrink-0" onClick={() => setAdding(true)}>
-              <Plus size={16} strokeWidth={1.75} aria-hidden />
-              New event
-            </Button>
-          </span>
-        }
-      >
-        {latest.name}
-      </Title>
-      {/* Remount when prep finishes so the people list re-fetches. */}
-      <People key={`${latest.id}:${latest.status}`} event={latest} />
+      <div className="-mb-2 flex items-center justify-between">
+        {inSetup ? (
+          <span />
+        ) : (
+          <Link to={paths.events()} className="-ml-1 inline-flex min-h-10 items-center gap-1.5 text-[15px] text-muted">
+            <CalendarDays size={18} strokeWidth={1.75} aria-hidden />
+            All events{list.length > 1 ? ` · ${list.length}` : ""}
+          </Link>
+        )}
+        <Button variant="ghost" className="-mr-2" onClick={() => setSearch({ new: "1" })}>
+          <Plus size={16} strokeWidth={1.75} aria-hidden />
+          New event
+        </Button>
+      </div>
+      <Title sub={event.date && formatWhen(event.date)}>{event.name}</Title>
+      {/* Remount when prep finishes (or someone is added) so the people list re-fetches. */}
+      <People key={`${event.id}:${event.status}:${added}`} event={event} />
+      {!inSetup && event.status !== "pending" && (
+        <EventFooter
+          event={event}
+          onChanged={() => void events.reload()}
+          onPersonAdded={() => setAdded((n) => n + 1)}
+          onDeleted={() => navigate(paths.events())}
+        />
+      )}
     </div>
   );
 }
 
-/** Date-only strings are a calendar day, so don't invent a time (or shift it a day by timezone). */
-function formatWhen(date: string) {
-  const dayOnly = /^\d{4}-\d{2}-\d{2}$/.test(date);
-  return new Date(date).toLocaleString(undefined, dayOnly ? { dateStyle: "medium", timeZone: "UTC" } : { dateStyle: "medium", timeStyle: "short" });
+function EventFooter({
+  event,
+  onChanged,
+  onPersonAdded,
+  onDeleted,
+}: {
+  event: Event;
+  onChanged: () => void;
+  onPersonAdded: () => void;
+  onDeleted: () => void;
+}) {
+  const [error, setError] = useState<string>();
+  const rename = async () => {
+    const name = window.prompt("Call this event…", event.name);
+    if (!name?.trim()) return;
+    await call(api.updateEvent, { params: { id: event.id }, body: { name } }).then(onChanged, (e) => setError(friendlyError(e)));
+  };
+  const remove = async () => {
+    if (!window.confirm(`Delete "${event.name}" and its guest list? People you've talked to stay in People.`)) return;
+    await call(api.deleteEvent, { params: { id: event.id } }).then(onDeleted, (e) => setError(friendlyError(e)));
+  };
+  return (
+    <div className="space-y-4 pt-4">
+      <QuickAdd eventId={event.id} onAdded={onPersonAdded} />
+      {error && <Notice>{error}</Notice>}
+      <div className="flex justify-center gap-4">
+        <Button variant="ghost" onClick={() => void rename()}>
+          Rename
+        </Button>
+        <Button variant="ghost" onClick={() => void remove()}>
+          Delete event
+        </Button>
+      </div>
+    </div>
+  );
 }
 
-function AddEvent({ onAdded }: { onAdded: () => void }) {
+function EventGone() {
+  return (
+    <div className="space-y-4">
+      <BackLink to={paths.events()} label="All events" />
+      <p className="font-serif text-[2rem] leading-tight">This event has left the building.</p>
+      <p className="text-[15px] text-muted text-pretty">It was deleted, or the link is from another phone.</p>
+    </div>
+  );
+}
+
+function AddEvent({ onAdded, onCancel }: { onAdded: (e: Event) => void; onCancel?: () => void }) {
   const [url, setUrl] = useState("");
   const [guestList, setGuestList] = useState("");
   const [screenshots, setScreenshots] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
 
   const pickShots = async (files: FileList | null) => setScreenshots(await Promise.all([...(files ?? [])].map(toDataUrl)));
-  const submit = async () => {
+  const run = async (work: () => Promise<Event>) => {
     setBusy(true);
-    await call(api.createEvent, {
-      body: { url: url || undefined, guestList: guestList || undefined, screenshots: screenshots.length ? screenshots : undefined },
-    }).finally(() => setBusy(false));
-    onAdded();
+    setError(undefined);
+    try {
+      onAdded(await work());
+    } catch (e) {
+      setError(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
   };
-  const seed = async () => {
-    await call(api.seedDemo);
-    onAdded();
-  };
+  const submit = () =>
+    run(() =>
+      call(api.createEvent, {
+        body: { url: url || undefined, guestList: guestList || undefined, screenshots: screenshots.length ? screenshots : undefined },
+      }),
+    );
+  const seed = () =>
+    run(async () => {
+      await call(api.seedDemo);
+      return (await call(api.listEvents)).at(-1)!;
+    });
 
   return (
     <div className="space-y-5">
@@ -108,11 +179,17 @@ function AddEvent({ onAdded }: { onAdded: () => void }) {
           />
         </Field>
       </div>
+      {error && <Notice>{error}</Notice>}
       <div className="flex flex-col gap-2">
-        <Button onClick={submit} disabled={busy || (!url && !guestList && !screenshots.length)}>
+        <Button onClick={() => void submit()} disabled={busy || (!url && !guestList && !screenshots.length)}>
           {busy ? "Sending in the scouts…" : "Prep me"}
         </Button>
-        <Button variant="ghost" onClick={seed}>
+        {onCancel && (
+          <Button variant="secondary" onClick={onCancel}>
+            Cancel
+          </Button>
+        )}
+        <Button variant="ghost" onClick={() => void seed()} disabled={busy}>
           Just show me the demo
         </Button>
       </div>
@@ -123,7 +200,7 @@ function AddEvent({ onAdded }: { onAdded: () => void }) {
 function People({ event }: { event: Event }) {
   const people = useApi(api.listPeople, { id: event.id });
   if (event.status === "pending") return <Pending>Scouting the guest list (reading bios so you don't have to)…</Pending>;
-  if (event.status === "error") return <Notice>Couldn't prep this one: {event.error}. Tap New event and paste the names instead.</Notice>;
+  if (event.status === "error") return <Notice>{event.error ?? "Couldn't prep this one."} Tap New event to try again.</Notice>;
   if (people.loading) return <Pending>Ranking the room…</Pending>;
   if (people.data?.length === 0) {
     return <p className="text-[15px] text-muted text-pretty">Nobody found. Screenshots of the guest list usually work better, tap New event.</p>;
