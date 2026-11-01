@@ -1,8 +1,19 @@
 # Claude Agent Rules
 
+## Read first
+
+Every session, before doing any work, read these (all docs live in `docs/`):
+
+- @docs/RUBRIC.md: how we're judged, plus the sponsor tracks (Render, ElevenLabs)
+- @docs/brainstorm.md: the product vision and features
+- @docs/plan.md: the build chunks; find which chunk your task belongs to
+- @docs/integration.md: folder ownership, shared contracts, and the rules that keep chunks connecting
+
+If your task touches another chunk's folders or a `shared/` contract, re-read the matching section of `docs/integration.md` first.
+
 ## Overall
 
-This project is for a hackathon. All of your work and product design decisions should keep in mind `RUBRIC.md` and actually improve the design of our demo and product for judging at the Hackathon.
+This project is for a hackathon. All of your work and product design decisions should keep in mind `docs/RUBRIC.md` and actually improve the design of our demo and product for judging at the Hackathon.
 
 ## Coding
 Part A: Local rules
@@ -79,7 +90,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## Team integration (read `docs/integration.md` first)
 
-Several people and agents build chunks of `plan.md` in parallel. To keep them snapping together:
+Several people and agents build chunks of `docs/plan.md` in parallel. To keep them snapping together:
 
 1. Work inside your chunk's folders (ownership table in `docs/integration.md`). Outside them, only add one-liners to the shared glue files.
 2. Chunks connect only through `shared/` contracts: models, `api` routes, live protocol, `LiveListener`, jobs. Contract changes are additive-only and go in their own commit.

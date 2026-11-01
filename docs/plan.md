@@ -1,7 +1,7 @@
 # Build plan
 
 General direction per chunk. Whoever picks up a chunk owns the details.
-How the chunks connect (folders, contracts, rules): **`docs/integration.md`**. Every chunk already has a working stub, so start by replacing yours.
+How the chunks connect (folders, contracts, rules): **[`integration.md`](integration.md)**. Every chunk already has a working stub, so start by replacing yours.
 
 ## Stack at a glance
 

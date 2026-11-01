@@ -2,9 +2,10 @@
 
 An earpiece coach that lets you larp as the most prepared person at any networking event.
 
-- **Product:** `brainstorm.md`
-- **Build plan + chunks:** `plan.md`
-- **How the chunks connect (read before coding):** `docs/integration.md`
+- **Product:** [`docs/brainstorm.md`](docs/brainstorm.md)
+- **Judging rubric:** [`docs/RUBRIC.md`](docs/RUBRIC.md)
+- **Build plan + chunks:** [`docs/plan.md`](docs/plan.md)
+- **How the chunks connect (read before coding):** [`docs/integration.md`](docs/integration.md)
 
 ## Run it
 
