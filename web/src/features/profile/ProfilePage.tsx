@@ -50,7 +50,7 @@ function useOptimisticSave(server: Profile | null | undefined, reload: () => Pro
   const [draft, setDraft] = useState(server);
   const latest = useRef(server);
   const pending = useRef(0);
-  const queue = useRef(Promise.resolve());
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
 
   // Take the server's copy only when none of our edits are still on the way.
   useEffect(() => {
