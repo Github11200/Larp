@@ -12,7 +12,7 @@ export const env = {
   basetenKey: process.env.BASETEN_API_KEY || undefined,
   openaiKey: process.env.OPENAI_API_KEY || undefined,
   /** Model ids. "openai:<id>" goes to OpenAI, anything else to Baseten. Fast = live hints, benched fastest on Baseten. */
-  llmFastModel: process.env.LLM_FAST_MODEL || "zai-org/GLM-5.2-Fast",
+  llmFastModel: process.env.LLM_FAST_MODEL || "deepseek-ai/DeepSeek-V4.1-Flash-1017-Fast",
   llmSmartModel: process.env.LLM_SMART_MODEL || "openai:gpt-6.1-terra",
   /** Must accept images (guest-list screenshots). */
   llmVisionModel: process.env.LLM_VISION_MODEL || "openai:gpt-6.1-terra",
