@@ -102,6 +102,19 @@ export const Participant = z.object({
 });
 export type Participant = z.infer<typeof Participant>;
 
+/** What a conversation taught you, even when nobody in it has a name yet (chunk 5). */
+export const ConversationNotes = z.object({
+  status: Status,
+  summary: z.string(),
+  /** Facts about the people you talked to. */
+  learned: z.array(z.string()).default([]),
+  /** Notable moments and tips for next time. */
+  moments: z.array(z.string()).default([]),
+  /** Names the transcript mentions; suggestions for "who was this?". */
+  namesHeard: z.array(z.string()).default([]),
+});
+export type ConversationNotes = z.infer<typeof ConversationNotes>;
+
 export const Conversation = z.object({
   id: z.string(),
   /** Primary person, if known. Groups and unknowns live in `participants`. */
@@ -113,6 +126,7 @@ export const Conversation = z.object({
   transcript: z.array(Utterance),
   hints: z.array(Hint),
   linksShared: z.array(Link),
+  notes: ConversationNotes.optional(),
 });
 export type Conversation = z.infer<typeof Conversation>;
 
@@ -130,5 +144,13 @@ export const FollowUp = z.object({
   draft: z.string(),
   dueAt: z.number(),
   status: z.enum(["open", "nudged", "done"]),
+  /** "pending" while the write-up is being generated; the fields above hold a quick fallback meanwhile. */
+  notesStatus: Status.default("ready"),
+  /** Things they said they'd do for you. Your own are `promises`. */
+  theirPromises: z.array(z.string()).default([]),
+  /** Facts about them from the conversation(s). */
+  learned: z.array(z.string()).default([]),
+  /** Every conversation merged into this follow-up (talking to the same person twice = one follow-up). */
+  conversationIds: z.array(z.string()).default([]),
 });
 export type FollowUp = z.infer<typeof FollowUp>;

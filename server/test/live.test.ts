@@ -31,5 +31,5 @@ test("a conversation produces link cards, hints, and a follow-up", async () => {
 
   const [followUp] = await db.followUps.list(userId);
   expect(followUp.personName).toBe("Sam Chen");
-  expect(followUp.promises).toEqual(["Yes, and I'll send you the deck tomorrow."]);
+  expect(followUp.promises).toEqual(["send them the deck tomorrow"]);
 });
