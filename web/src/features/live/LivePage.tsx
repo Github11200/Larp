@@ -200,7 +200,7 @@ function StartButton({ mic, resume, onStart }: { mic: MicState; resume: boolean;
 function SayThis({ openers, listening }: { openers: string[]; listening: boolean }) {
   if (!openers.length) {
     return (
-      <p data-testid="hint" className="font-serif text-[1.9rem] text-muted italic">
+      <p data-testid="hint" className="font-serif text-[1.9rem] text-muted">
         {listening ? "Listening…" : "Who's here?"}
       </p>
     );

@@ -56,7 +56,7 @@ export function FollowUpsPage() {
           <DueNow followUps={fs.filter(isDue)} />
           {groups.map((g) => (
             <section key={g.key} className="space-y-6">
-              <h2 className="border-b border-line pb-2 font-serif text-[1.35rem] italic text-muted">{g.name}</h2>
+              <h2 className="border-b border-line pb-2 font-serif text-[1.35rem] text-muted">{g.name}</h2>
               <ul className="space-y-10">
                 {g.open.map((f) => (
                   <li key={f.id}>

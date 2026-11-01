@@ -38,9 +38,9 @@ export function Field({ label, children }: { label: string; children: ReactNode 
   );
 }
 
-/** A line to say out loud, in Garamond italic: the app's signature voice for coached lines. */
+/** A line to say out loud, in upright Garamond (italic was too hard to read at a glance). */
 export function Quote({ children }: { children: ReactNode }) {
-  return <q className="block -indent-[0.4em] font-serif text-[1.5rem] leading-[1.2] italic text-pretty">{children}</q>;
+  return <q className="block -indent-[0.4em] font-serif text-[1.5rem] leading-[1.2] text-pretty">{children}</q>;
 }
 
 /** Serif page title with an optional plain-language line under it. */

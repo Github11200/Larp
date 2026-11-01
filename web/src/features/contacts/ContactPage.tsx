@@ -123,7 +123,7 @@ function ConversationLine({ conversation: cv, name }: { conversation: Conversati
         {others.length > 0 && ` · with ${others.join(", ")}`}
         {` · ${cv.transcript.length} lines`}
       </p>
-      {said && <p className="font-serif text-[1.15rem] leading-snug italic text-pretty">“{said}”</p>}
+      {said && <p className="font-serif text-[1.15rem] leading-snug text-pretty">“{said}”</p>}
     </div>
   );
 }
