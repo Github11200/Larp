@@ -18,7 +18,8 @@ try {
   await page.getByText("Read the dossiers first").click();
   await page.getByText("Sam Chen").click();
   await page.getByText("Talk to Sam").click();
-  await page.getByRole("button", { name: "Type instead of talking" }).click();
+  await page.getByText("Talking to Sam Chen").waitFor();
+  await page.getByText("demo: type a line").click();
   const input = page.getByPlaceholder("type what someone says…");
   await input.fill("I'm building a tennis app, you should try it");
   await input.press("Enter");
