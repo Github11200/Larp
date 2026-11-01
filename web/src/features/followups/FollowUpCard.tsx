@@ -17,8 +17,8 @@ export function FollowUpCard({ followUp: f, conversations, onChange }: { followU
   if (f.status === "done") {
     return (
       <article id={`f-${f.id}`} className="flex items-baseline justify-between gap-4 text-muted">
-        <p className="text-[16px]">
-          <span className="font-serif text-[1.35rem] text-fg">{f.personName}</span> · sent. Networking legend.
+        <p className="text-body">
+          <span className="text-title text-fg">{f.personName}</span> · sent. Legend.
         </p>
         <Button variant="ghost" onClick={() => save({ status: "open" })}>
           Undo
@@ -29,18 +29,18 @@ export function FollowUpCard({ followUp: f, conversations, onChange }: { followU
 
   return (
     <article id={`f-${f.id}`} className="scroll-mt-6 space-y-5">
-      <header className="space-y-2">
+      <header className="space-y-1">
         {isDue(f) && (
-          <p className="flex items-center gap-2 text-[14px] font-semibold text-live">
+          <p className="flex items-center gap-2 text-meta font-semibold text-live">
             <BellRing size={16} strokeWidth={2} aria-hidden />
             It's been a week. Don't ghost {first}.
           </p>
         )}
-        <h3 className="font-serif text-[1.9rem] leading-[1.05]">{f.personName}</h3>
-        {conversations.length > 1 && <p className="text-[13px] text-muted">Talked {conversations.length} times</p>}
+        <h3 className="text-title">{f.personName}</h3>
+        {conversations.length > 1 && <p className="text-meta text-muted">Talked {conversations.length} times</p>}
       </header>
       {f.notesStatus === "pending" && <Pending>Writing up what happened…</Pending>}
-      {f.summary && <p className="text-[16px] leading-relaxed text-pretty">{f.summary}</p>}
+      {f.summary && <p className="text-body text-pretty">{f.summary}</p>}
       <Promises title="You promised" items={f.promises} />
       <Promises title={`${first} said they'd`} items={f.theirPromises} />
       <Draft key={f.draft} draft={f.draft} onSave={(draft) => save({ draft })} />
@@ -56,13 +56,11 @@ export function FollowUpCard({ followUp: f, conversations, onChange }: { followU
 function Promises({ title, items }: { title: string; items: string[] }) {
   if (!items.length) return null;
   return (
-    <section className="space-y-2">
+    <section className="space-y-3">
       <SectionLabel>{title}</SectionLabel>
-      <ul className="divide-y divide-line border-y border-line">
+      <ul className="list-disc space-y-1 pl-5 text-body marker:text-muted">
         {items.map((p) => (
-          <li key={p} className="py-2.5 text-[16px]">
-            {sentence(p)}
-          </li>
+          <li key={p}>{sentence(p)}</li>
         ))}
       </ul>
     </section>
@@ -101,7 +99,7 @@ function Draft({ draft, onSave }: { draft: string; onSave: (draft: string) => Pr
             autoFocus
           />
         ) : (
-          <p className="text-[16px] leading-relaxed whitespace-pre-line">{text}</p>
+          <p className="text-body whitespace-pre-line">{text}</p>
         )}
         <div className="grid grid-cols-2 gap-2">
           <Button variant="secondary" onClick={editing ? done : () => setEditing(true)}>

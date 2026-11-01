@@ -23,13 +23,13 @@ export function NotesCard({ conversation: c, onChange }: { conversation: Convers
   return (
     <article className="space-y-4">
       <header className="space-y-1">
-        <h3 className="font-serif text-[1.9rem] leading-[1.05]">Who was this?</h3>
-        <p className="text-[13px] text-muted">
+        <h3 className="text-title">Who was this?</h3>
+        <p className="text-meta text-muted">
           {minutes} min · {new Date(c.startedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · a face, no name
         </p>
       </header>
       {c.notes?.status === "pending" && <Pending>Writing up what happened…</Pending>}
-      {c.notes?.summary && <p className="text-[16px] leading-relaxed text-pretty">{c.notes.summary}</p>}
+      {c.notes?.summary && <p className="text-body text-pretty">{c.notes.summary}</p>}
       <form
         className="space-y-2"
         onSubmit={(e) => {
@@ -40,7 +40,7 @@ export function NotesCard({ conversation: c, onChange }: { conversation: Convers
         {(c.notes?.namesHeard.length ?? 0) > 0 && (
           <div className="flex flex-wrap gap-2">
             {c.notes!.namesHeard.map((n) => (
-              <Button key={n} variant="secondary" className="min-h-10 px-3 text-[14px]" onClick={() => label(n)}>
+              <Button key={n} variant="secondary" className="min-h-10 px-3 text-meta" onClick={() => label(n)}>
                 It was {n}
               </Button>
             ))}
