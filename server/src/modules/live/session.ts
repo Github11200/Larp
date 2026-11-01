@@ -57,7 +57,7 @@ export interface Transport {
 
 /** How long a conversation survives its socket closing (refresh, tunnel, locked phone) before it's saved. */
 export const GRACE_MS = 90_000;
-/** A saved conversation this recent can still be picked back up (e.g. after a server restart). */
+/** A saved conversation active this recently can still be picked back up (e.g. after a server restart). */
 const RESUME_WINDOW_MS = 10 * 60_000;
 /** Saving never waits longer than this on a slow hint. */
 export const STOP_WAIT_MS = 2000;
@@ -92,6 +92,8 @@ export class LiveSession implements LiveContext {
   private whisperSeq = 0;
   private lineIds = new WeakMap<Utterance, string>();
   private graceTimer?: NodeJS.Timeout;
+  /** Saves run one after another, so a late mid-chat snapshot can never overwrite the final save. */
+  private saving = Promise.resolve();
 
   constructor(
     readonly userId: string,
@@ -190,7 +192,7 @@ export class LiveSession implements LiveContext {
     await Promise.race([Promise.allSettled(this.inflight), sleep(STOP_WAIT_MS)]);
     this.conversation.endedAt = Date.now();
     if (this.conversation.transcript.length > 0) {
-      await db.conversations.put(this.userId, this.conversation);
+      await this.save();
       await this.fanOut("onEnd", (l) => l.onEnd?.(this));
     }
     this.send({ type: "ended", conversationId: this.conversation.id });
@@ -211,7 +213,8 @@ export class LiveSession implements LiveContext {
   /** Pick a recently saved conversation back up (the server restarted or the grace period ran out). */
   private async adoptSaved(conversationId: string): Promise<boolean> {
     const saved = await db.conversations.get(this.userId, conversationId);
-    if (!saved || Date.now() - (saved.endedAt ?? saved.startedAt) > RESUME_WINDOW_MS) return false;
+    const lastActive = saved?.endedAt ?? saved?.transcript.at(-1)?.at ?? saved?.startedAt ?? 0;
+    if (!saved || Date.now() - lastActive > RESUME_WINDOW_MS) return false;
     this.conversation = { ...saved, endedAt: undefined };
     for (const p of saved.participants) {
       const person = p.personId ? await db.people.get(this.userId, p.personId) : null;
@@ -355,6 +358,7 @@ export class LiveSession implements LiveContext {
     const u: Utterance = { speaker, text, at: Date.now() };
     this.conversation.transcript.push(u);
     this.send({ type: "transcript", speaker, text, final: true, id: this.lineId(u) });
+    if (this.started) void this.save(); // snapshot: a server restart mid-chat can resume from here
     try {
       await this.catchNames(text);
       await this.refreshPending();
@@ -362,6 +366,17 @@ export class LiveSession implements LiveContext {
       console.error("[live] names", e); // knowing who's there is a bonus; never lose the line over it
     }
     await this.fanOut("onUtterance", (l) => l.onUtterance?.(this, u));
+  }
+
+  private save(): Promise<void> {
+    const snapshot = structuredClone(this.conversation);
+    this.saving = this.saving
+      .then(() => db.conversations.put(this.userId, snapshot))
+      .then(
+        () => {},
+        (e) => console.error("[live] save", e),
+      );
+    return this.saving;
   }
 
   private lineId(u: Utterance): string {

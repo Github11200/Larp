@@ -140,6 +140,19 @@ test("resume after the conversation was already saved (server restart) continues
   expect(all[0].transcript.map((u) => u.text)).toEqual(["Line one", "Line two"]);
 });
 
+test("each finished line is snapshotted, so a restart mid-chat loses nothing", async () => {
+  const userId = await newUser();
+  const s = new LiveSession(userId, recorder().transport, []);
+  await s.handle({ type: "start" });
+  await s.handle({ type: "say", speaker: "them", text: "still here?" });
+  await new Promise((r) => setTimeout(r, 10));
+  const snap = await db.conversations.get(userId, s.conversation.id);
+  expect(snap?.transcript.map((u) => u.text)).toEqual(["still here?"]);
+  expect(snap?.endedAt).toBeUndefined();
+  await s.stop();
+  expect((await db.conversations.get(userId, s.conversation.id))?.endedAt).toBeTypeOf("number");
+});
+
 test("stop saves within the cap even if a listener hangs forever", async () => {
   const userId = await newUser();
   const stuck: LiveListener = { name: "stuck", onUtterance: () => new Promise(() => {}) };

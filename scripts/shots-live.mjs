@@ -98,6 +98,29 @@ async function open(name, path) {
   if (all.length !== 1 || all[0].transcript.length !== 2) throw new Error(`refresh split the conversation: ${JSON.stringify(all.map((c) => c.transcript.length))}`);
 }
 
+// 5 · network blip: the socket drops, the page shows reconnecting, then carries on in the same conversation
+{
+  const { page, shot, type, conversations } = await open("blip", "/live?person=p-sam");
+  const sockets = [];
+  await page.routeWebSocket(/\/live/, (ws) => {
+    ws.connectToServer();
+    sockets.push(ws);
+  });
+  await page.reload(); // so the socket goes through the route
+  await type("Before the blip");
+  await page.getByText("Before the blip").waitFor();
+  await sockets.at(-1).close();
+  await page.getByText("Reconnecting…").waitFor();
+  await shot("1-reconnecting");
+  await page.getByText("not listening").waitFor();
+  await type("After the blip", "me");
+  await page.getByText("After the blip").waitFor();
+  await page.getByRole("button", { name: "End", exact: true }).click();
+  await page.waitForURL(/followups/);
+  const all = await conversations();
+  if (all.length !== 1 || all[0].transcript.length !== 2) throw new Error(`blip split the conversation: ${JSON.stringify(all.map((c) => c.transcript.length))}`);
+}
+
 await browser.close();
 if (errors.length) {
   console.error("browser errors:\n" + errors.join("\n"));
