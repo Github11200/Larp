@@ -1,7 +1,7 @@
 // Chunk 3 · Resume PDF + one free-text box (links, hobbies, anything) -> profile build job.
 import { api } from "@larp/shared";
 import { useState } from "react";
-import { Button, fieldClass, FilePick, Notice, Pending } from "../../components/ui";
+import { Button, Field, fieldClass, FilePick, Notice, Pending } from "../../components/ui";
 import { call } from "../../lib/api";
 import { readPdf } from "./readPdf";
 
@@ -32,17 +32,16 @@ export function BuildForm({ onStarted, cta }: { onStarted: () => void; cta: stri
       <div className="space-y-2">
         <FilePick label="Upload your resume (PDF)" picked={resume?.name} accept="application/pdf" onPick={(files) => pickFile(files?.[0])} />
         {status === "reading" && <Pending>Reading your resume…</Pending>}
-        {status === "failed" && <Notice>Couldn't read that PDF. Paste the important bits below instead.</Notice>}
+        {status === "failed" && <Notice>Couldn't read that PDF. Paste the good bits below.</Notice>}
       </div>
-      <label className="block space-y-2">
-        <span className="block text-[13px] font-semibold text-muted">Links and anything else about you</span>
+      <Field label="Links, hobbies, anything">
         <textarea
           className={`${fieldClass} h-36 resize-none leading-relaxed`}
-          placeholder={"github.com/you, linkedin.com/in/you, your demo\n\"I play tennis and I'm building a voice AI app\""}
+          placeholder={"github.com/you, linkedin.com/in/you\nI play tennis, building a voice AI app"}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
         />
-      </label>
+      </Field>
       <Button className="w-full" onClick={submit} disabled={status === "reading" || (!resume && !notes.trim())}>
         {cta}
       </Button>

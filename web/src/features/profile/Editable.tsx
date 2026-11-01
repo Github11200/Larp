@@ -1,4 +1,4 @@
-// Tap-to-edit text. Saves on blur or Enter, Escape cancels.
+// Text that reads plain, and becomes tap-to-edit while the profile is in Edit mode. Saves on blur or Enter, Escape cancels.
 import { Pencil } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { fieldClass } from "../../components/ui";
@@ -8,6 +8,7 @@ export function Editable({
   onSave,
   placeholder,
   label,
+  editing,
   className = "",
   editClassName = "",
   multiline = false,
@@ -18,6 +19,8 @@ export function Editable({
   placeholder: string;
   /** Spoken name of the field ("Edit headline"). */
   label: string;
+  /** Edit mode: fields are tappable. Otherwise they just read (empty ones vanish). */
+  editing: boolean;
   /** Typography when reading. */
   className?: string;
   /** Extra classes on the edit field (it uses the standard field look). */
@@ -28,22 +31,18 @@ export function Editable({
 }) {
   const [draft, setDraft] = useState<string>();
 
+  if (!editing) return value ? <span className={`block ${className}`}>{display ?? value}</span> : null;
+
   if (draft === undefined) {
     return (
       <button
         type="button"
         aria-label={`Edit ${label}: ${value || "empty"}`}
-        className={`group flex min-h-11 w-full gap-3 py-1.5 text-left ${multiline ? "items-start" : "items-center"}`}
+        className={`flex min-h-11 w-full gap-3 py-1.5 text-left ${multiline ? "items-start" : "items-center"}`}
         onClick={() => setDraft(value)}
       >
         <span className={`min-w-0 flex-1 ${className} ${value ? "" : "text-muted"}`}>{value ? (display ?? value) : placeholder}</span>
-        {/* Quiet hint that every field is tappable; brightens on hover/focus. */}
-        <Pencil
-          size={14}
-          strokeWidth={1.75}
-          aria-hidden
-          className={`shrink-0 text-muted ${multiline ? "mt-1" : ""} opacity-50 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100`}
-        />
+        <Pencil size={14} strokeWidth={1.75} aria-hidden className={`shrink-0 text-muted ${multiline ? "mt-1" : ""}`} />
       </button>
     );
   }
