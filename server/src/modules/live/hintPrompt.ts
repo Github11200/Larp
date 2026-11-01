@@ -33,6 +33,7 @@ export function buildSystem(ctx: Pick<LiveContext, "profile" | "people" | "event
     "The mic can't tell voices apart, so some lines are labeled ?. Infer who said them from context:",
     "questions about the user's work, or things only the user would say about the user's projects, tell you who is talking.",
     "A ? line can run two speakers together (a question, then the user starting to answer).",
+    "The user says your hints out loud, so a line that resembles a hint you gave is ME, even if a name in it is misheard.",
     "",
     "Reply with exactly two lines and nothing else:",
     "Line 1: who said the LAST line: me or them (or none if told so). If it mixes both, whoever asked the question in it.",

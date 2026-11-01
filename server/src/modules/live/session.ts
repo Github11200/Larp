@@ -354,13 +354,15 @@ export class LiveSession implements LiveContext {
   }
 
   private async commit(text: string, speaker: Speaker): Promise<void> {
-    if (speaker === "unknown" && isEchoOfHint(text, this.conversation.hints)) return; // the mic heard the coach
-    const u: Utterance = { speaker, text, at: Date.now() };
+    const hints = this.conversation.hints;
+    if (speaker === "unknown" && isEchoOfHint(text, hints)) return; // the mic heard the coach
+    const sayingHint = speaker === "unknown" && repeatsHint(text, hints);
+    const u: Utterance = { speaker: sayingHint ? "me" : speaker, text, at: Date.now() };
     this.conversation.transcript.push(u);
-    this.send({ type: "transcript", speaker, text, final: true, id: this.lineId(u) });
+    this.send({ type: "transcript", speaker: u.speaker, text, final: true, id: this.lineId(u) });
     if (this.started) void this.save(); // snapshot: a server restart mid-chat can resume from here
     try {
-      await this.catchNames(text);
+      if (!sayingHint) await this.catchNames(text); // a misheard "I'm Nonit" in a hint must not add a stranger
       await this.refreshPending();
     } catch (e) {
       console.error("[live] names", e); // knowing who's there is a bonus; never lose the line over it
@@ -402,14 +404,27 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms).unref());
 const words = (s: string) => s.toLowerCase().match(/[a-z0-9']+/g) ?? [];
 /** An echo lands while the whisper plays (~350ms a word); the user repeating a hint lands after it, and must be kept. */
 const echoWindowMs = (hint: string) => 2500 + 350 * words(hint).length;
+/** How long after a whisper the user might still be saying it. */
+const REPEAT_WINDOW_MS = 30_000;
+/** Shorter lines ("what's your name?") match hints by chance. */
+const REPEAT_MIN_WORDS = 5;
+
+/** Share of a line's words that came from the hint. */
+function overlap(said: string[], hint: string): number {
+  const hinted = new Set(words(hint));
+  return said.filter((w) => hinted.has(w)).length / said.length;
+}
 
 /** On a speaker (not earbuds) the mic picks up the whisper; such lines are mostly a recent hint's words. */
 export function isEchoOfHint(text: string, hints: Hint[], now = Date.now()): boolean {
   const said = words(text);
   if (said.length === 0) return false;
-  return hints.some((h) => {
-    if (now - h.at > echoWindowMs(h.text)) return false;
-    const hinted = new Set(words(h.text));
-    return said.filter((w) => hinted.has(w)).length / said.length >= 0.6;
-  });
+  return hints.some((h) => now - h.at <= echoWindowMs(h.text) && overlap(said, h.text) >= 0.6);
+}
+
+/** The user saying a hint out loud, as they're coached to. Lets the transcript credit them instead of the other person. */
+export function repeatsHint(text: string, hints: Hint[], now = Date.now()): boolean {
+  const said = words(text);
+  if (said.length < REPEAT_MIN_WORDS) return false;
+  return hints.some((h) => now - h.at <= REPEAT_WINDOW_MS && overlap(said, h.text) >= 0.5);
 }

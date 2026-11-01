@@ -4,7 +4,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import { seedDemo } from "../src/lib/seed";
 import { parseReply } from "../src/modules/live/hintPrompt";
 import { hintsListener } from "../src/modules/live/hints";
-import { isEchoOfHint, LiveSession } from "../src/modules/live/session";
+import { isEchoOfHint, LiveSession, repeatsHint } from "../src/modules/live/session";
 
 const llm = vi.hoisted(() => ({ replies: [] as { text: string; delayMs: number }[], prompts: [] as string[] }));
 vi.mock("../src/lib/llm", () => ({
@@ -98,6 +98,29 @@ test("mic lines that echo a recent whisper are dropped, real speech is kept", ()
   expect(isEchoOfHint("mention your Larp coach demo.", hints, 3000)).toBe(true);
   expect(isEchoOfHint("Do you have a demo I can see?", hints, 3000)).toBe(false);
   expect(isEchoOfHint("mention your Larp coach demo", hints, 20000)).toBe(false); // too long ago
+});
+
+test("a line that repeats a recent hint is the user saying it, even with a misheard name", () => {
+  const hints = [{ id: "h", text: "Hey, I'm Nonit — I build AI tools for doctors. What's your name?", at: 0 }];
+  expect(repeatsHint("Hey, I'm Anand. I build AI tools for doctors. What's your name?", hints, 8000)).toBe(true);
+  expect(repeatsHint("What's your name?", hints, 8000)).toBe(false); // too short to tell
+  expect(repeatsHint("I'm building voice agents for dental clinics.", hints, 8000)).toBe(false);
+  expect(repeatsHint("Hey, I'm Anand. I build AI tools for doctors.", hints, 60_000)).toBe(false); // too long ago
+});
+
+test("saying a hint aloud is credited to you: no hint for it, and no stranger caught from it", async () => {
+  llm.replies.push({ text: "them\nHey, I'm Nonit, I build AI tools for doctors. What's your name?", delayMs: 0 });
+  const { s, hints } = await session();
+  await s.handle({ type: "say", speaker: "unknown", text: "Hello?" });
+  await vi.waitFor(() => expect(hints()).toHaveLength(1));
+  await new Promise((r) => setTimeout(r, 30));
+  vi.useFakeTimers({ now: Date.now() + 8000, toFake: ["Date"] }); // past the echo window
+  await s.handle({ type: "say", speaker: "unknown", text: "Hey, I'm Anand. I build AI tools for doctors. What's your name?" });
+  vi.useRealTimers();
+  await s.stop();
+  expect(s.conversation.transcript.map((u) => u.speaker)).toEqual(["them", "me"]);
+  expect(s.conversation.participants.map((p) => p.name)).not.toContain("Anand");
+  expect(llm.prompts).toHaveLength(1);
 });
 
 test("left out of a group chat: after 3 lines from others, the coach offers a way in, then waits", async () => {
