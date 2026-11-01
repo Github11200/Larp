@@ -1,6 +1,8 @@
 // Chunk 4 · "Your people": everyone you've prepped or met, most recent interaction first.
 import { api, type ContactRow } from "@larp/shared";
-import { Avatar, Notice, Pending, Pill, Row, Rows, Title } from "../../components/ui";
+import { useState } from "react";
+import { Avatar, Button, Notice, Pending, Pill, Row, Rows, Title } from "../../components/ui";
+import { call } from "../../lib/api";
 import { useApi } from "../../lib/useApi";
 import { paths } from "../../routes";
 import { friendlyError } from "../prep/format";
@@ -26,7 +28,23 @@ export function ContactsPage() {
           ))}
         </Rows>
       )}
+      <TimeSkip onDone={() => void contacts.reload()} />
     </div>
+  );
+}
+
+/** Demo only: fill in weeks of past events and people to show the app after real use. */
+function TimeSkip({ onDone }: { onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const skip = async () => {
+    setBusy(true);
+    await call(api.seedHistory).finally(() => setBusy(false));
+    onDone();
+  };
+  return (
+    <Button variant="ghost" disabled={busy} onClick={() => void skip()}>
+      {busy ? "Fast-forwarding…" : "Demo: skip ahead 6 weeks"}
+    </Button>
   );
 }
 
