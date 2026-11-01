@@ -4,8 +4,6 @@
 
 An AI earpiece for networking events. It scouts who's there, whispers what to say mid-conversation, and writes your follow-ups.
 
-**▶ Try it: [larp-web.onrender.com](https://larp-web.onrender.com)** → tap **"Skip, use the demo crowd"**. No signup. Best on a phone with earbuds.
-
 ![Prep, dossier, live whisper, link card, recap](docs/media/journey.png)
 
 ## The problem
